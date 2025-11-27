@@ -1,0 +1,26 @@
+# PyQt5 기반 데이터 수정 프로그램 - 의존성 패키지
+
+# GUI Framework
+PyQt5>=5.15.0
+PyQt5-Qt5>=5.15.0
+PyQt5-sip>=12.11.0
+
+# Data Processing
+pandas>=1.5.0
+numpy>=1.24.0
+
+# Visualization
+matplotlib>=3.7.0
+seaborn>=0.12.0
+
+# File I/O
+openpyxl>=3.1.0  # Excel 파일 지원
+xlrd>=2.0.1      # 구형 Excel 파일 지원
+
+# Build and Packaging
+pyinstaller>=5.0.0
+
+# Optional: Code Quality Tools (개발용)
+# pytest>=7.0.0
+# black>=23.0.0
+# flake8>=6.0.0
