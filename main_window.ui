@@ -1,0 +1,1692 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1500</width>
+    <height>900</height>
+   </rect>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>1400</width>
+    <height>800</height>
+   </size>
+  </property>
+  <property name="windowTitle">
+   <string>Data Modification Tool - v1.0.0</string>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">/* ============================================================
+   Global Styles - SCADA Dark Theme
+   ============================================================ */
+QMainWindow {
+    background-color: #1E1E1E;
+}
+
+QWidget {
+    color: #E0E0E0;
+    font-family: 'Segoe UI', 'Noto Sans KR', sans-serif;
+    font-size: 12px;
+}
+
+/* ============================================================
+   Scroll Bar
+   ============================================================ */
+QScrollBar:vertical {
+    border: none;
+    background: #2D2D30;
+    width: 10px;
+    margin: 0;
+}
+
+QScrollBar::handle:vertical {
+    background: #555555;
+    border-radius: 5px;
+    min-height: 30px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background: #666666;
+}
+
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0px;
+}
+
+QScrollBar:horizontal {
+    border: none;
+    background: #2D2D30;
+    height: 10px;
+    margin: 0;
+}
+
+QScrollBar::handle:horizontal {
+    background: #555555;
+    border-radius: 5px;
+    min-width: 30px;
+}
+
+/* ============================================================
+   Section GroupBox (Main Sections)
+   ============================================================ */
+QGroupBox#sectionGroup {
+    background-color: #252526;
+    border: 1px solid #3C3C3C;
+    border-radius: 4px;
+    margin-top: 20px;
+    padding: 15px;
+    padding-top: 25px;
+    font-weight: bold;
+}
+
+QGroupBox#sectionGroup::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    left: 0px;
+    top: 0px;
+    padding: 5px 15px;
+    background-color: #007ACC;
+    color: white;
+    border-radius: 4px 4px 0 0;
+    font-size: 13px;
+    font-weight: bold;
+}
+
+/* Inner GroupBox (Statistics, Save) */
+QGroupBox#innerGroup {
+    background-color: #2D2D30;
+    border: 1px solid #3C3C3C;
+    border-radius: 4px;
+    margin-top: 15px;
+    padding: 10px;
+    padding-top: 20px;
+}
+
+QGroupBox#innerGroup::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    left: 0px;
+    top: 0px;
+    padding: 3px 10px;
+    background-color: #007ACC;
+    color: white;
+    border-radius: 4px 4px 0 0;
+    font-size: 11px;
+}
+
+/* ============================================================
+   Buttons
+   ============================================================ */
+QPushButton {
+    background-color: #3C3C3C;
+    color: #E0E0E0;
+    border: 1px solid #555555;
+    border-radius: 4px;
+    padding: 4px 12px;
+    font-weight: 500;
+}
+
+QPushButton:hover {
+    background-color: #505050;
+    border-color: #007ACC;
+}
+
+QPushButton:pressed {
+    background-color: #007ACC;
+}
+
+QPushButton:disabled {
+    background-color: #2D2D30;
+    color: #666666;
+    border-color: #3C3C3C;
+}
+
+/* Action Button (Load File) */
+QPushButton#actionButton {
+    background-color: #007ACC;
+    color: white;
+    border: none;
+    font-weight: bold;
+    padding: 4px 12px;
+}
+
+QPushButton#actionButton:hover {
+    background-color: #1E90FF;
+}
+
+/* Secondary Button */
+QPushButton#secondaryButton {
+    background-color: #3C3C3C;
+    color: #E0E0E0;
+    border: 1px solid #555555;
+    padding: 4px 12px;
+}
+
+QPushButton#secondaryButton:hover {
+    background-color: #505050;
+    border-color: #007ACC;
+}
+
+/* Small Secondary Button */
+QPushButton#smallSecondaryButton {
+    background-color: #3C3C3C;
+    color: #E0E0E0;
+    border: 1px solid #555555;
+    padding: 3px 10px;
+    font-size: 11px;
+}
+
+QPushButton#smallSecondaryButton:hover {
+    background-color: #505050;
+    border-color: #007ACC;
+}
+
+/* Execute Button (Green) */
+QPushButton#executeButton {
+    background-color: #2E7D32;
+    color: white;
+    border: none;
+    font-weight: bold;
+    padding: 4px 12px;
+}
+
+QPushButton#executeButton:hover {
+    background-color: #388E3C;
+}
+
+QPushButton#executeButton:pressed {
+    background-color: #1B5E20;
+}
+
+/* Small Info Button */
+QPushButton#infoButton {
+    background-color: #555555;
+    color: #E0E0E0;
+    border: none;
+    border-radius: 9px;
+    padding: 0px;
+    min-height: 18px;
+    max-height: 18px;
+    min-width: 18px;
+    max-width: 18px;
+    font-weight: bold;
+    font-size: 11px;
+}
+
+QPushButton#infoButton:hover {
+    background-color: #007ACC;
+}
+
+/* ============================================================
+   Input Fields
+   ============================================================ */
+QLineEdit, QSpinBox, QDoubleSpinBox {
+    background-color: #333337;
+    border: 1px solid #3C3C3C;
+    border-radius: 4px;
+    padding: 4px 8px;
+    color: #E0E0E0;
+    selection-background-color: #007ACC;
+}
+
+QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus {
+    border: 1px solid #007ACC;
+}
+
+QLineEdit:read-only {
+    background-color: #2D2D30;
+    color: #AAAAAA;
+}
+
+/* ComboBox */
+QComboBox {
+    background-color: #333337;
+    border: 1px solid #3C3C3C;
+    border-radius: 4px;
+    padding: 4px 8px;
+    color: #E0E0E0;
+}
+
+QComboBox:focus {
+    border: 1px solid #007ACC;
+}
+
+QComboBox::drop-down {
+    border: none;
+    width: 20px;
+}
+
+QComboBox::down-arrow {
+    image: none;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 5px solid #E0E0E0;
+    margin-right: 6px;
+}
+
+QComboBox QAbstractItemView {
+    background-color: #333337;
+    border: 1px solid #3C3C3C;
+    selection-background-color: #007ACC;
+    color: #E0E0E0;
+}
+
+/* ============================================================
+   Labels
+   ============================================================ */
+QLabel {
+    color: #CCCCCC;
+}
+
+QLabel#infoLabel {
+    color: #00CED1;
+    font-weight: bold;
+    font-size: 12px;
+}
+
+QLabel#subsectionTitle {
+    color: #E0E0E0;
+    font-weight: bold;
+    font-size: 12px;
+    padding-bottom: 5px;
+}
+
+QLabel#tableHeader {
+    color: #AAAAAA;
+    font-size: 11px;
+}
+
+/* ============================================================
+   Tables
+   ============================================================ */
+QTableWidget {
+    background-color: #1E1E1E;
+    border: 1px solid #3C3C3C;
+    gridline-color: #3C3C3C;
+    color: #E0E0E0;
+}
+
+QTableWidget#dataTable {
+    background-color: #252526;
+}
+
+QTableWidget#statsTable {
+    background-color: #252526;
+}
+
+QTableWidget#selectionTable {
+    background-color: transparent;
+    border: none;
+}
+
+QTableWidget::item {
+    padding: 5px;
+    border: none;
+}
+
+QTableWidget::item:selected {
+    background-color: #007ACC;
+    color: white;
+}
+
+QHeaderView::section {
+    background-color: #333337;
+    color: #E0E0E0;
+    padding: 6px;
+    border: none;
+    border-bottom: 1px solid #3C3C3C;
+    border-right: 1px solid #3C3C3C;
+    font-weight: bold;
+}
+
+/* ============================================================
+   Checkbox
+   ============================================================ */
+QCheckBox {
+    color: #E0E0E0;
+    spacing: 8px;
+}
+
+QCheckBox::indicator {
+    width: 16px;
+    height: 16px;
+    border: 1px solid #555555;
+    border-radius: 3px;
+    background-color: #333337;
+}
+
+QCheckBox::indicator:checked {
+    background-color: #007ACC;
+    border-color: #007ACC;
+}
+
+QCheckBox::indicator:hover {
+    border-color: #007ACC;
+}
+
+/* ============================================================
+   Status Bar
+   ============================================================ */
+QStatusBar {
+    background-color: #007ACC;
+    color: white;
+    padding: 5px;
+    font-size: 12px;
+}
+
+/* ============================================================
+   Frame
+   ============================================================ */
+QFrame {
+    border: none;
+}</string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QHBoxLayout" name="mainLayout">
+    <property name="spacing">
+     <number>10</number>
+    </property>
+    <property name="leftMargin">
+     <number>15</number>
+    </property>
+    <property name="topMargin">
+     <number>15</number>
+    </property>
+    <property name="rightMargin">
+     <number>15</number>
+    </property>
+    <property name="bottomMargin">
+     <number>15</number>
+    </property>
+    
+    <!-- ========== LEFT PANEL: Sections 1-4 ========== -->
+    <item>
+     <widget class="QWidget" name="leftPanel">
+      <property name="maximumSize">
+       <size>
+        <width>400</width>
+        <height>16777215</height>
+       </size>
+      </property>
+      <property name="minimumSize">
+       <size>
+        <width>360</width>
+        <height>0</height>
+       </size>
+      </property>
+      <layout class="QVBoxLayout" name="leftPanelLayout">
+       <property name="spacing">
+        <number>8</number>
+       </property>
+       <property name="leftMargin">
+        <number>0</number>
+       </property>
+       <property name="topMargin">
+        <number>0</number>
+       </property>
+       <property name="rightMargin">
+        <number>0</number>
+       </property>
+       <property name="bottomMargin">
+        <number>0</number>
+       </property>
+       
+       <!-- Section 1: Data Load -->
+       <item>
+        <widget class="QGroupBox" name="groupDataLoad">
+         <property name="title">
+          <string>1. Data Load</string>
+         </property>
+         <property name="objectName">
+          <string>sectionGroup</string>
+         </property>
+         <layout class="QVBoxLayout" name="dataLoadLayout">
+          <property name="spacing">
+           <number>6</number>
+          </property>
+          <item>
+           <layout class="QHBoxLayout" name="fileRowLayout">
+            <property name="spacing">
+             <number>6</number>
+            </property>
+            <item>
+             <widget class="QPushButton" name="btnLoadFile">
+              <property name="text">
+               <string>Load File...</string>
+              </property>
+              <property name="objectName">
+               <string>actionButton</string>
+              </property>
+              <property name="minimumSize">
+               <size>
+                <width>80</width>
+                <height>24</height>
+               </size>
+              </property>
+              <property name="maximumSize">
+               <size>
+                <width>80</width>
+                <height>24</height>
+               </size>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLineEdit" name="editFilePath">
+              <property name="text">
+               <string>C:\Users\Analyst\Data\sensor_log_2025.csv</string>
+              </property>
+              <property name="placeholderText">
+               <string>Select a file...</string>
+              </property>
+              <property name="readOnly">
+               <bool>true</bool>
+              </property>
+              <property name="minimumSize">
+               <size>
+                <width>0</width>
+                <height>24</height>
+               </size>
+              </property>
+              <property name="maximumSize">
+               <size>
+                <width>16777215</width>
+                <height>24</height>
+               </size>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <!-- Table View Button -->
+          <item>
+           <layout class="QHBoxLayout" name="tableViewLayout">
+            <item>
+             <widget class="QLabel" name="lblFileInfo">
+              <property name="text">
+               <string>Loaded: 1000 rows, 3 columns</string>
+              </property>
+              <property name="objectName">
+               <string>infoLabel</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="tableViewSpacer">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>40</width>
+                <height>20</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnTableView">
+              <property name="text">
+               <string>📊 Table View</string>
+              </property>
+              <property name="objectName">
+               <string>actionButton</string>
+              </property>
+              <property name="minimumSize">
+               <size>
+                <width>90</width>
+                <height>24</height>
+               </size>
+              </property>
+              <property name="maximumSize">
+               <size>
+                <width>90</width>
+                <height>24</height>
+               </size>
+              </property>
+              <property name="toolTip">
+               <string>View loaded data in a popup table</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       
+       <!-- Section 2: Unit Configuration with Custom -->
+       <item>
+        <widget class="QGroupBox" name="groupUnitConfig">
+         <property name="title">
+          <string>2. Unit Configuration (Time-Based)</string>
+         </property>
+         <property name="objectName">
+          <string>sectionGroup</string>
+         </property>
+         <layout class="QVBoxLayout" name="unitConfigLayout">
+          <property name="spacing">
+           <number>6</number>
+          </property>
+          <!-- Row 1: Labels -->
+          <item>
+           <layout class="QHBoxLayout" name="unitLabelLayout">
+            <item>
+             <widget class="QLabel" name="lblOriginalUnit">
+              <property name="text">
+               <string>Original Unit</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="lblTargetUnit">
+              <property name="text">
+               <string>Target Unit</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <!-- Row 2: Unit ComboBoxes -->
+          <item>
+           <layout class="QHBoxLayout" name="unitComboLayout">
+            <item>
+             <widget class="QComboBox" name="comboOriginalUnit">
+              <item>
+               <property name="text">
+                <string>초 (second)</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>분 (minute)</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>시간 (hour)</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>일 (day)</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>Custom (사용자 정의)</string>
+               </property>
+              </item>
+             </widget>
+            </item>
+            <item>
+             <widget class="QComboBox" name="comboTargetUnit">
+              <property name="currentIndex">
+               <number>1</number>
+              </property>
+              <item>
+               <property name="text">
+                <string>초 (second)</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>분 (minute)</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>시간 (hour)</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>일 (day)</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>Custom (사용자 정의)</string>
+               </property>
+              </item>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <!-- Row 3: Custom Original Unit -->
+          <item>
+           <layout class="QHBoxLayout" name="customOriginalLayout">
+            <item>
+             <widget class="QLabel" name="lblCustomOriginal">
+              <property name="text">
+               <string>Original Custom:</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QSpinBox" name="spinOriginalValue">
+              <property name="minimum">
+               <number>1</number>
+              </property>
+              <property name="maximum">
+               <number>9999</number>
+              </property>
+              <property name="value">
+               <number>5</number>
+              </property>
+              <property name="minimumSize">
+               <size>
+                <width>60</width>
+                <height>0</height>
+               </size>
+              </property>
+              <property name="toolTip">
+               <string>Custom value (e.g., 5, 10, 15)</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QComboBox" name="comboOriginalBaseUnit">
+              <property name="toolTip">
+               <string>Base unit for custom (e.g., 5분, 10초)</string>
+              </property>
+              <property name="minimumSize">
+               <size>
+                <width>60</width>
+                <height>0</height>
+               </size>
+              </property>
+              <item>
+               <property name="text">
+                <string>초</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>분</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>시간</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>일</string>
+               </property>
+              </item>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <!-- Row 4: Custom Target Unit -->
+          <item>
+           <layout class="QHBoxLayout" name="customTargetLayout">
+            <item>
+             <widget class="QLabel" name="lblCustomTarget">
+              <property name="text">
+               <string>Target Custom:</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QSpinBox" name="spinTargetValue">
+              <property name="minimum">
+               <number>1</number>
+              </property>
+              <property name="maximum">
+               <number>9999</number>
+              </property>
+              <property name="value">
+               <number>10</number>
+              </property>
+              <property name="minimumSize">
+               <size>
+                <width>60</width>
+                <height>0</height>
+               </size>
+              </property>
+              <property name="toolTip">
+               <string>Custom value (e.g., 5, 10, 15)</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QComboBox" name="comboTargetBaseUnit">
+              <property name="toolTip">
+               <string>Base unit for custom (e.g., 5분, 10초)</string>
+              </property>
+              <property name="currentIndex">
+               <number>1</number>
+              </property>
+              <property name="minimumSize">
+               <size>
+                <width>60</width>
+                <height>0</height>
+               </size>
+              </property>
+              <item>
+               <property name="text">
+                <string>초</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>분</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>시간</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>일</string>
+               </property>
+              </item>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <!-- Row 5: Conversion Factor -->
+          <item>
+           <widget class="QLabel" name="lblConversionFactor">
+            <property name="text">
+             <string>Conversion Factor: 0.0166667</string>
+            </property>
+            <property name="objectName">
+             <string>infoLabel</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       
+       <!-- Section 3: Data Range Selection -->
+       <item>
+        <widget class="QGroupBox" name="groupDataRange">
+         <property name="title">
+          <string>3. Data Range Selection</string>
+         </property>
+         <property name="objectName">
+          <string>sectionGroup</string>
+         </property>
+         <layout class="QVBoxLayout" name="dataRangeMainLayout">
+          <property name="spacing">
+           <number>6</number>
+          </property>
+          <item>
+           <layout class="QHBoxLayout" name="dataRangeLayout">
+            <property name="spacing">
+             <number>10</number>
+            </property>
+            <!-- Column Selection -->
+            <item>
+             <layout class="QVBoxLayout" name="columnSelectLayout">
+              <property name="spacing">
+               <number>4</number>
+              </property>
+              <item>
+               <widget class="QLabel" name="lblColumn">
+                <property name="text">
+                 <string>Column</string>
+                </property>
+                <property name="objectName">
+                 <string>tableHeader</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QCheckBox" name="chkColumn1">
+                <property name="text">
+                 <string>Time_s</string>
+                </property>
+                <property name="checked">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QCheckBox" name="chkColumn2">
+                <property name="text">
+                 <string>Value_A</string>
+                </property>
+                <property name="checked">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QCheckBox" name="chkColumn3">
+                <property name="text">
+                 <string>Value_B</string>
+                </property>
+                <property name="checked">
+                 <bool>false</bool>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </item>
+            <!-- Row Range -->
+            <item>
+             <layout class="QGridLayout" name="rowRangeLayout">
+              <property name="spacing">
+               <number>6</number>
+              </property>
+              <item row="0" column="0">
+               <widget class="QLabel" name="lblRowStart">
+                <property name="text">
+                 <string>Row Start:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="1">
+               <widget class="QLineEdit" name="editRowStart">
+                <property name="text">
+                 <string>0</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="0">
+               <widget class="QLabel" name="lblRowEnd">
+                <property name="text">
+                 <string>Row End:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="1">
+               <widget class="QLineEdit" name="editRowEnd">
+                <property name="text">
+                 <string>999</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </item>
+           </layout>
+          </item>
+          <!-- Preview Selection Button - Centered and Small -->
+          <item>
+           <layout class="QHBoxLayout" name="previewSelectionLayout">
+            <item>
+             <spacer name="previewLeftSpacer">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>40</width>
+                <height>20</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnPreviewSelection">
+              <property name="text">
+               <string>Preview Selection</string>
+              </property>
+              <property name="objectName">
+               <string>smallSecondaryButton</string>
+              </property>
+              <property name="minimumSize">
+               <size>
+                <width>100</width>
+                <height>22</height>
+               </size>
+              </property>
+              <property name="maximumSize">
+               <size>
+                <width>120</width>
+                <height>22</height>
+               </size>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="previewRightSpacer">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>40</width>
+                <height>20</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+           </layout>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       
+       <!-- Section 4: Modification Method -->
+       <item>
+        <widget class="QGroupBox" name="groupModification">
+         <property name="title">
+          <string>4. Modification Method</string>
+         </property>
+         <property name="objectName">
+          <string>sectionGroup</string>
+         </property>
+         <layout class="QVBoxLayout" name="modificationLayout">
+          <property name="spacing">
+           <number>6</number>
+          </property>
+          <!-- Method Selection -->
+          <item>
+           <layout class="QHBoxLayout" name="methodRowLayout">
+            <property name="spacing">
+             <number>6</number>
+            </property>
+            <item>
+             <widget class="QLabel" name="lblMethod">
+              <property name="text">
+               <string>Method</string>
+              </property>
+              <property name="minimumSize">
+               <size>
+                <width>45</width>
+                <height>0</height>
+               </size>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QComboBox" name="comboMethod">
+              <item>
+               <property name="text">
+                <string>Multiplication (곱하기)</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>Division (나누기)</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>Addition (더하기)</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>Subtraction (빼기)</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>--- Upsampling (업샘플링) ---</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>  Linear (선형 보간)</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>  Nearest (최근접)</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>  Next (다음 값)</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>  Previous (이전 값)</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>  PCHIP (구간별 3차)</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>  Cubic (3차 스플라인)</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>  V5Cubic (MATLAB V5)</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>  Makima (수정 Akima)</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>  Spline (스플라인)</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>--- Downsampling (다운샘플링) ---</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>  Average (평균)</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>  Skip (건너뛰기)</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>  Max (최대값)</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>  Min (최소값)</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>  Median (중앙값)</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>--- Filter (필터) ---</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>  LPF (저역통과필터)</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>  HPF (고역통과필터)</string>
+               </property>
+              </item>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnMethodInfo">
+              <property name="text">
+               <string>?</string>
+              </property>
+              <property name="objectName">
+               <string>infoButton</string>
+              </property>
+              <property name="toolTip">
+               <string>Click to see method descriptions</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <!-- Value Input -->
+          <item>
+           <layout class="QHBoxLayout" name="valueRowLayout">
+            <property name="spacing">
+             <number>6</number>
+            </property>
+            <item>
+             <widget class="QLabel" name="lblValue">
+              <property name="text">
+               <string>Value</string>
+              </property>
+              <property name="minimumSize">
+               <size>
+                <width>45</width>
+                <height>0</height>
+               </size>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLineEdit" name="editValue">
+              <property name="text">
+               <string>1.5</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <!-- Buttons -->
+          <item>
+           <layout class="QHBoxLayout" name="modButtonLayout">
+            <item>
+             <widget class="QPushButton" name="btnPreview">
+              <property name="text">
+               <string>Preview</string>
+              </property>
+              <property name="objectName">
+               <string>secondaryButton</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnExecute">
+              <property name="text">
+               <string>Execute</string>
+              </property>
+              <property name="objectName">
+               <string>executeButton</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       
+       <!-- Spacer to push everything up -->
+       <item>
+        <spacer name="leftPanelSpacer">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    
+    <!-- ========== RIGHT PANEL: Section 5 (Preview & Results) - LARGE ========== -->
+    <item>
+     <widget class="QGroupBox" name="groupResults">
+      <property name="title">
+       <string>5. Preview &amp; Results</string>
+      </property>
+      <property name="objectName">
+       <string>sectionGroup</string>
+      </property>
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+        <horstretch>1</horstretch>
+        <verstretch>1</verstretch>
+       </sizepolicy>
+      </property>
+      <layout class="QVBoxLayout" name="resultsMainLayout">
+       <property name="spacing">
+        <number>10</number>
+       </property>
+       
+       <!-- Top: Graph Area (Large) -->
+       <item>
+        <widget class="QFrame" name="frameGraph">
+         <property name="frameShape">
+          <enum>QFrame::StyledPanel</enum>
+         </property>
+         <property name="frameShadow">
+          <enum>QFrame::Raised</enum>
+         </property>
+         <property name="styleSheet">
+          <string>QFrame#frameGraph { background-color: #1E1E1E; border: 1px solid #3C3C3C; border-radius: 4px; }</string>
+         </property>
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+           <horstretch>1</horstretch>
+           <verstretch>1</verstretch>
+          </sizepolicy>
+         </property>
+         <property name="minimumSize">
+          <size>
+           <width>0</width>
+           <height>300</height>
+          </size>
+         </property>
+         <layout class="QVBoxLayout" name="graphLayout">
+          <item>
+           <widget class="QLabel" name="lblGraphPlaceholder">
+            <property name="text">
+             <string>Before/After Comparison Graph
+(Matplotlib Canvas will be inserted here programmatically)</string>
+            </property>
+            <property name="alignment">
+             <set>Qt::AlignCenter</set>
+            </property>
+            <property name="styleSheet">
+             <string>color: #888888; font-size: 14px;</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       
+       <!-- Bottom: Preview Table, Statistics, Save -->
+       <item>
+        <layout class="QHBoxLayout" name="bottomResultsLayout">
+         <property name="spacing">
+          <number>10</number>
+         </property>
+         
+         <!-- Modification Preview Table - WIDER -->
+         <item>
+          <layout class="QVBoxLayout" name="previewTableLayout">
+           <item>
+            <widget class="QLabel" name="lblModificationPreview">
+             <property name="text">
+              <string>Modification Preview</string>
+             </property>
+             <property name="objectName">
+              <string>subsectionTitle</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QTableWidget" name="tablePreview">
+             <property name="objectName">
+              <string>dataTable</string>
+             </property>
+             <property name="minimumWidth">
+              <number>400</number>
+             </property>
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+               <horstretch>2</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="columnCount">
+              <number>3</number>
+             </property>
+             <property name="rowCount">
+              <number>10</number>
+             </property>
+             <attribute name="horizontalHeaderStretchLastSection">
+              <bool>true</bool>
+             </attribute>
+             <column>
+              <property name="text">
+               <string>Time_s</string>
+              </property>
+             </column>
+             <column>
+              <property name="text">
+               <string>Value_A</string>
+              </property>
+             </column>
+             <column>
+              <property name="text">
+               <string>Value_B</string>
+              </property>
+             </column>
+             <item row="0" column="0">
+              <property name="text">
+               <string>0</string>
+              </property>
+             </item>
+             <item row="0" column="1">
+              <property name="text">
+               <string>0.1851</string>
+              </property>
+             </item>
+             <item row="0" column="2">
+              <property name="text">
+               <string>1.3895</string>
+              </property>
+             </item>
+             <item row="1" column="0">
+              <property name="text">
+               <string>25</string>
+              </property>
+             </item>
+             <item row="1" column="1">
+              <property name="text">
+               <string>16.16533</string>
+              </property>
+             </item>
+             <item row="1" column="2">
+              <property name="text">
+               <string>75.27</string>
+              </property>
+             </item>
+             <item row="2" column="0">
+              <property name="text">
+               <string>50</string>
+              </property>
+             </item>
+             <item row="2" column="1">
+              <property name="text">
+               <string>21.50995</string>
+              </property>
+             </item>
+             <item row="2" column="2">
+              <property name="text">
+               <string>13.89833</string>
+              </property>
+             </item>
+             <item row="3" column="0">
+              <property name="text">
+               <string>75</string>
+              </property>
+             </item>
+             <item row="3" column="1">
+              <property name="text">
+               <string>35.49776</string>
+              </property>
+             </item>
+             <item row="3" column="2">
+              <property name="text">
+               <string>12.39257</string>
+              </property>
+             </item>
+             <item row="4" column="0">
+              <property name="text">
+               <string>100</string>
+              </property>
+             </item>
+             <item row="4" column="1">
+              <property name="text">
+               <string>43.33123</string>
+              </property>
+             </item>
+             <item row="4" column="2">
+              <property name="text">
+               <string>14.63377</string>
+              </property>
+             </item>
+             <item row="5" column="0">
+              <property name="text">
+               <string>160</string>
+              </property>
+             </item>
+             <item row="5" column="1">
+              <property name="text">
+               <string>45.35013</string>
+              </property>
+             </item>
+             <item row="5" column="2">
+              <property name="text">
+               <string>18.95183</string>
+              </property>
+             </item>
+             <item row="6" column="0">
+              <property name="text">
+               <string>175</string>
+              </property>
+             </item>
+             <item row="6" column="1">
+              <property name="text">
+               <string>79.79896</string>
+              </property>
+             </item>
+             <item row="6" column="2">
+              <property name="text">
+               <string>72.233</string>
+              </property>
+             </item>
+             <item row="7" column="0">
+              <property name="text">
+               <string>180</string>
+              </property>
+             </item>
+             <item row="7" column="1">
+              <property name="text">
+               <string>29.13285</string>
+              </property>
+             </item>
+             <item row="7" column="2">
+              <property name="text">
+               <string>14.12566</string>
+              </property>
+             </item>
+             <item row="8" column="0">
+              <property name="text">
+               <string>190</string>
+              </property>
+             </item>
+             <item row="8" column="1">
+              <property name="text">
+               <string>36.79885</string>
+              </property>
+             </item>
+             <item row="8" column="2">
+              <property name="text">
+               <string>91.8</string>
+              </property>
+             </item>
+             <item row="9" column="0">
+              <property name="text">
+               <string>1000</string>
+              </property>
+             </item>
+             <item row="9" column="1">
+              <property name="text">
+               <string>79.18427</string>
+              </property>
+             </item>
+             <item row="9" column="2">
+              <property name="text">
+               <string>14.52663</string>
+              </property>
+             </item>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         
+         <!-- Statistics Summary -->
+         <item>
+          <widget class="QGroupBox" name="groupStatistics">
+           <property name="title">
+            <string>Statistics Summary</string>
+           </property>
+           <property name="objectName">
+            <string>innerGroup</string>
+           </property>
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+             <horstretch>1</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <layout class="QVBoxLayout" name="statsLayout">
+            <item>
+             <widget class="QTableWidget" name="tableStats">
+              <property name="objectName">
+               <string>statsTable</string>
+              </property>
+              <property name="columnCount">
+               <number>3</number>
+              </property>
+              <property name="rowCount">
+               <number>4</number>
+              </property>
+              <attribute name="horizontalHeaderStretchLastSection">
+               <bool>true</bool>
+              </attribute>
+              <attribute name="verticalHeaderVisible">
+               <bool>false</bool>
+              </attribute>
+              <column>
+               <property name="text">
+                <string>Metric</string>
+               </property>
+              </column>
+              <column>
+               <property name="text">
+                <string>Original</string>
+               </property>
+              </column>
+              <column>
+               <property name="text">
+                <string>Modified</string>
+               </property>
+              </column>
+              <item row="0" column="0">
+               <property name="text">
+                <string>Min</string>
+               </property>
+              </item>
+              <item row="0" column="1">
+               <property name="text">
+                <string>0</string>
+               </property>
+              </item>
+              <item row="0" column="2">
+               <property name="text">
+                <string>200</string>
+               </property>
+              </item>
+              <item row="1" column="0">
+               <property name="text">
+                <string>Max</string>
+               </property>
+              </item>
+              <item row="1" column="1">
+               <property name="text">
+                <string>0</string>
+               </property>
+              </item>
+              <item row="1" column="2">
+               <property name="text">
+                <string>1290.0</string>
+               </property>
+              </item>
+              <item row="2" column="0">
+               <property name="text">
+                <string>Mean</string>
+               </property>
+              </item>
+              <item row="2" column="1">
+               <property name="text">
+                <string>0.075793</string>
+               </property>
+              </item>
+              <item row="2" column="2">
+               <property name="text">
+                <string>33.15756</string>
+               </property>
+              </item>
+              <item row="3" column="0">
+               <property name="text">
+                <string>Std Dev</string>
+               </property>
+              </item>
+              <item row="3" column="1">
+               <property name="text">
+                <string>0.00913</string>
+               </property>
+              </item>
+              <item row="3" column="2">
+               <property name="text">
+                <string>1.652147</string>
+               </property>
+              </item>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+         </item>
+         
+         <!-- Save Functionality - Compact -->
+         <item>
+          <widget class="QGroupBox" name="groupSave">
+           <property name="title">
+            <string>6. Save</string>
+           </property>
+           <property name="objectName">
+            <string>innerGroup</string>
+           </property>
+           <property name="minimumWidth">
+            <number>120</number>
+           </property>
+           <property name="maximumWidth">
+            <number>130</number>
+           </property>
+           <layout class="QVBoxLayout" name="saveLayout">
+            <property name="spacing">
+             <number>4</number>
+            </property>
+            <property name="leftMargin">
+             <number>6</number>
+            </property>
+            <property name="topMargin">
+             <number>6</number>
+            </property>
+            <property name="rightMargin">
+             <number>6</number>
+            </property>
+            <property name="bottomMargin">
+             <number>6</number>
+            </property>
+            <item>
+             <widget class="QComboBox" name="comboFormat">
+              <item>
+               <property name="text">
+                <string>.xlsx</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>.csv</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>.txt</string>
+               </property>
+              </item>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnSaveAs">
+              <property name="text">
+               <string>Save As...</string>
+              </property>
+              <property name="objectName">
+               <string>smallSecondaryButton</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnExportGraph">
+              <property name="text">
+               <string>Export Graph</string>
+              </property>
+              <property name="objectName">
+               <string>smallSecondaryButton</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+         </item>
+        </layout>
+       </item>
+      </layout>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+  <widget class="QStatusBar" name="statusbar">
+   <property name="styleSheet">
+    <string>background-color: #007ACC; color: white;</string>
+   </property>
+  </widget>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
