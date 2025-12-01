@@ -71,51 +71,50 @@ QScrollBar::handle:horizontal {
 }
 
 /* ============================================================
-   Section GroupBox (Main Sections)
+   Section GroupBox (Main Sections) - Dashed Border Style
    ============================================================ */
 QGroupBox#sectionGroup {
-    background-color: #252526;
-    border: 1px solid #3C3C3C;
-    border-radius: 4px;
-    margin-top: 20px;
-    padding: 15px;
-    padding-top: 25px;
-    font-weight: bold;
+    background-color: transparent;
+    border: 1px dashed #555555;
+    border-radius: 0px;
+    margin-top: 8px;
+    padding: 10px;
+    padding-top: 5px;
+    font-weight: normal;
 }
 
 QGroupBox#sectionGroup::title {
     subcontrol-origin: margin;
     subcontrol-position: top left;
-    left: 0px;
+    left: 5px;
     top: 0px;
-    padding: 5px 15px;
-    background-color: #007ACC;
-    color: white;
-    border-radius: 4px 4px 0 0;
-    font-size: 13px;
-    font-weight: bold;
+    padding: 0px 3px;
+    background-color: #1E1E1E;
+    color: #888888;
+    font-size: 11px;
+    font-weight: normal;
 }
 
-/* Inner GroupBox (Statistics, Save) */
+/* Inner GroupBox (Statistics, Save, Preview) - Dashed Border Style */
 QGroupBox#innerGroup {
-    background-color: #2D2D30;
-    border: 1px solid #3C3C3C;
-    border-radius: 4px;
-    margin-top: 15px;
-    padding: 10px;
-    padding-top: 20px;
+    background-color: transparent;
+    border: 1px dashed #555555;
+    border-radius: 0px;
+    margin-top: 8px;
+    padding: 8px;
+    padding-top: 5px;
 }
 
 QGroupBox#innerGroup::title {
     subcontrol-origin: margin;
     subcontrol-position: top left;
-    left: 0px;
+    left: 5px;
     top: 0px;
-    padding: 3px 10px;
-    background-color: #007ACC;
-    color: white;
-    border-radius: 4px 4px 0 0;
+    padding: 0px 3px;
+    background-color: #1E1E1E;
+    color: #888888;
     font-size: 11px;
+    font-weight: normal;
 }
 
 /* ============================================================
@@ -1215,7 +1214,7 @@ QFrame {
     <item>
      <widget class="QGroupBox" name="groupResults">
       <property name="title">
-       <string>5. Preview &amp; Results</string>
+       <string>6. Preview Results</string>
       </property>
       <property name="objectName">
        <string>sectionGroup</string>
@@ -1281,21 +1280,24 @@ QFrame {
           <number>10</number>
          </property>
          
-         <!-- Modification Preview Table - WIDER -->
+         <!-- Modification Preview Table - WIDER (innerGroup 스타일 적용) -->
          <item>
-          <layout class="QVBoxLayout" name="previewTableLayout">
-           <item>
-            <widget class="QLabel" name="lblModificationPreview">
-             <property name="text">
-              <string>Modification Preview</string>
-             </property>
-             <property name="objectName">
-              <string>subsectionTitle</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QTableWidget" name="tablePreview">
+          <widget class="QGroupBox" name="groupModificationPreview">
+           <property name="title">
+            <string>Modification Preview</string>
+           </property>
+           <property name="objectName">
+            <string>innerGroup</string>
+           </property>
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+             <horstretch>2</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <layout class="QVBoxLayout" name="previewTableLayout">
+            <item>
+             <widget class="QTableWidget" name="tablePreview">
              <property name="objectName">
               <string>dataTable</string>
              </property>
@@ -1485,6 +1487,7 @@ QFrame {
             </widget>
            </item>
           </layout>
+         </widget>
          </item>
          
          <!-- Statistics Summary -->
@@ -1605,7 +1608,7 @@ QFrame {
          <item>
           <widget class="QGroupBox" name="groupSave">
            <property name="title">
-            <string>6. Save</string>
+            <string>7. Save</string>
            </property>
            <property name="objectName">
             <string>innerGroup</string>

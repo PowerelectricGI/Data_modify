@@ -55,7 +55,7 @@ coverage.xml
 .pytest_cache/
 
 # Documentation files
-*.md
+#*.md
 *.pdf
 *.pptx
 *.png
