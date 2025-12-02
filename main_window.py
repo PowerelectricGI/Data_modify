@@ -10,13 +10,15 @@ Version: 1.0.0
 
 import os
 from PyQt5 import uic
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QAbstractTableModel
+from PyQt5.QtGui import QColor, QPalette
 from PyQt5.QtWidgets import (
     QMainWindow, QFileDialog, QMessageBox, QCheckBox,
     QVBoxLayout, QDialog, QTableWidget, QTableWidgetItem,
     QHeaderView, QDialogButtonBox, QLabel, QTextEdit,
-    QGroupBox, QListWidget, QSizePolicy
+    QGroupBox, QListWidget, QSizePolicy, QProgressDialog,
+    QTabWidget, QTableView
 )
-from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QColor
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
@@ -30,39 +32,121 @@ except ImportError:
     SCIPY_AVAILABLE = False
 
 
+class FileLoaderThread(QThread):
+    """파일 로딩을 위한 백그라운드 스레드"""
+    finished = pyqtSignal(object) # DataFrame
+    error = pyqtSignal(str) # Error message
+
+    def __init__(self, file_path):
+        super().__init__()
+        self.file_path = file_path
+
+    def run(self):
+        try:
+            if self.file_path.endswith('.csv') or self.file_path.endswith('.txt'):
+                df = pd.read_csv(self.file_path)
+            elif self.file_path.endswith('.xlsx') or self.file_path.endswith('.xls'):
+                df = pd.read_excel(self.file_path)
+            else:
+                raise ValueError("Unsupported file format")
+            
+            self.finished.emit(df)
+        except Exception as e:
+            self.error.emit(str(e))
+
+
+class PandasModel(QAbstractTableModel):
+    """Pandas DataFrame을 위한 Qt 모델 (고성능)"""
+    def __init__(self, data):
+        super().__init__()
+        self._data = data
+
+    def rowCount(self, parent=None):
+        return self._data.shape[0]
+
+    def columnCount(self, parent=None):
+        return self._data.shape[1]
+
+    def data(self, index, role=Qt.DisplayRole):
+        if index.isValid():
+            if role == Qt.DisplayRole:
+                value = self._data.iloc[index.row(), index.column()]
+                
+                # Float formatting
+                if isinstance(value, (float, np.floating)):
+                    return f"{value:.4f}"
+                return str(value)
+            
+            elif role == Qt.ForegroundRole:
+                # Diff 컬럼 (마지막 컬럼)이고 값이 0이 아니면 빨간색 표시
+                # 여기서는 컬럼 이름으로 체크하는 것이 안전함
+                col_name = self._data.columns[index.column()]
+                if col_name == "Diff":
+                    value = self._data.iloc[index.row(), index.column()]
+                    try:
+                        if isinstance(value, (int, float, np.number)) and abs(value) > 1e-9:
+                            return QColor("#FF0000")
+                    except:
+                        pass
+        return None
+
+    def headerData(self, col, orientation, role):
+        if orientation == Qt.Horizontal and role == Qt.DisplayRole:
+            return str(self._data.columns[col])
+        return None
+
+
 class TableViewDialog(QDialog):
-    """데이터 테이블을 보여주는 팝업 다이얼로그"""
+    """데이터 테이블을 탭 형태로 보여주는 팝업 다이얼로그"""
     
-    def __init__(self, parent=None, data=None, headers=None):
+    def __init__(self, parent=None, original_df=None, modified_df=None):
         super().__init__(parent)
-        self.setWindowTitle("Data Table View")
-        self.setMinimumSize(800, 600)
-        self.resize(1000, 700)
+        self.setWindowTitle("Full Data Table View")
+        self.setMinimumSize(900, 700)
+        self.resize(1000, 800)
         
-        # 다크 테마 스타일
+        self.original_df = original_df
+        self.modified_df = modified_df
+        
+        # 라이트 테마 스타일 (가독성 향상)
         self.setStyleSheet("""
             QDialog {
-                background-color: #1E1E1E;
+                background-color: #FFFFFF;
+                color: #000000;
             }
-            QTableWidget {
-                background-color: #252526;
-                border: 1px solid #3C3C3C;
-                gridline-color: #3C3C3C;
-                color: #E0E0E0;
+            QTabWidget::pane {
+                border: 1px solid #CCCCCC;
+                background-color: #FFFFFF;
             }
-            QTableWidget::item {
-                padding: 5px;
+            QTabBar::tab {
+                background-color: #F0F0F0;
+                color: #000000;
+                padding: 8px 20px;
+                border: 1px solid #CCCCCC;
+                border-bottom: none;
+                border-top-left-radius: 4px;
+                border-top-right-radius: 4px;
             }
-            QTableWidget::item:selected {
-                background-color: #007ACC;
+            QTabBar::tab:selected {
+                background-color: #FFFFFF;
+                border-bottom: 1px solid #FFFFFF;
+                font-weight: bold;
+            }
+            QTableView {
+                background-color: #FFFFFF;
+                border: none;
+                gridline-color: #DDDDDD;
+                color: #000000;
+                selection-background-color: #E6F7FF;
+                selection-color: #000000;
             }
             QHeaderView::section {
-                background-color: #333337;
-                color: #E0E0E0;
+                background-color: #F0F0F0;
+                color: #000000;
                 padding: 6px;
                 border: none;
-                border-bottom: 1px solid #3C3C3C;
-                border-right: 1px solid #3C3C3C;
+                border-bottom: 1px solid #CCCCCC;
+                border-right: 1px solid #CCCCCC;
                 font-weight: bold;
             }
             QPushButton {
@@ -80,28 +164,90 @@ class TableViewDialog(QDialog):
         
         layout = QVBoxLayout(self)
         
-        # 테이블 위젯
-        self.table = QTableWidget()
+        # 탭 위젯 생성
+        self.tabs = QTabWidget()
+        self.tabs.currentChanged.connect(self.on_tab_changed)
+        layout.addWidget(self.tabs)
         
-        # 데이터가 있으면 표시
-        if data is not None and headers is not None:
-            self.table.setColumnCount(len(headers))
-            self.table.setRowCount(len(data))
-            self.table.setHorizontalHeaderLabels(headers)
-            self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        # 탭 초기화 (데이터가 있을 경우)
+        if self.original_df is not None and self.modified_df is not None:
+            # 컬럼 목록 (Original 기준)
+            self.columns = self.original_df.columns
             
-            # 데이터 채우기 (최대 1000행까지만 표시하여 성능 최적화)
-            max_rows = min(len(data), 1000)
-            for row in range(max_rows):
-                for col, value in enumerate(data[row]):
-                    self.table.setItem(row, col, QTableWidgetItem(str(value)))
-        
-        layout.addWidget(self.table)
+            for col in self.columns:
+                # 각 탭에 빈 QTableView 추가 (Lazy Loading을 위해)
+                # 실제 모델 설정은 탭이 선택될 때 수행
+                tab = QTableView()
+                # 성능 최적화 설정
+                tab.setAlternatingRowColors(False)
+                # 헤더 설정
+                tab.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+                
+                self.tabs.addTab(tab, col)
+            
+            # 첫 번째 탭 로드
+            if self.tabs.count() > 0:
+                self.load_tab_data(0)
         
         # 닫기 버튼
         button_box = QDialogButtonBox(QDialogButtonBox.Close)
         button_box.rejected.connect(self.close)
         layout.addWidget(button_box)
+
+    def on_tab_changed(self, index):
+        """탭 변경 시 데이터 로드 (Lazy Loading)"""
+        if index >= 0:
+            self.load_tab_data(index)
+
+    def load_tab_data(self, index):
+        """특정 탭의 데이터를 로드"""
+        table_view = self.tabs.widget(index)
+        
+        # 이미 모델이 설정된 경우 스킵
+        if table_view.model() is not None:
+            return
+            
+        col_name = self.tabs.tabText(index)
+        
+        try:
+            orig_series = self.original_df[col_name]
+            # Modified DF에 해당 컬럼이 있는지 확인
+            if col_name in self.modified_df.columns:
+                mod_series = self.modified_df[col_name]
+            else:
+                mod_series = None
+            
+            if mod_series is None:
+                return
+            
+            # 길이 비교 및 최대 길이 계산
+            len_orig = len(orig_series)
+            len_mod = len(mod_series)
+            max_len = max(len_orig, len_mod)
+            
+            # 통합 DataFrame 생성 (항상 Original, Modified, Diff 표시)
+            # Series를 새로 생성하여 인덱스를 0부터 max_len까지 맞춤 (자동으로 NaN 채움)
+            s_orig = pd.Series(orig_series.values, name='Original')
+            s_mod = pd.Series(mod_series.values, name='Modified')
+            
+            display_df = pd.DataFrame({
+                'Index': range(max_len),
+                'Original': s_orig.reindex(range(max_len)),
+                'Modified': s_mod.reindex(range(max_len))
+            })
+            
+            # Diff 계산 (숫자형인 경우)
+            if pd.api.types.is_numeric_dtype(display_df['Original']) and pd.api.types.is_numeric_dtype(display_df['Modified']):
+                display_df['Diff'] = display_df['Modified'] - display_df['Original']
+            else:
+                display_df['Diff'] = 0 # 또는 NaN
+            
+            # 모델 설정
+            model = PandasModel(display_df)
+            table_view.setModel(model)
+            
+        except Exception as e:
+            print(f"Error loading tab {col_name}: {e}")
 
 
 class MethodInfoDialog(QDialog):
@@ -113,22 +259,22 @@ class MethodInfoDialog(QDialog):
         self.setMinimumSize(650, 600)
         self.resize(700, 650)
         
-        # 다크 테마 스타일
+        # 라이트 테마 스타일 (가독성 향상)
         self.setStyleSheet("""
             QDialog {
-                background-color: #1E1E1E;
-                color: #E0E0E0;
+                background-color: #FFFFFF;
+                color: #000000;
             }
             QLabel {
-                color: #E0E0E0;
+                color: #000000;
                 font-size: 14px;
                 font-weight: bold;
                 padding: 10px 0;
             }
             QTextEdit {
-                background-color: #252526;
-                border: 1px solid #3C3C3C;
-                color: #E0E0E0;
+                background-color: #FFFFFF;
+                border: 1px solid #CCCCCC;
+                color: #000000;
                 font-size: 12px;
                 padding: 10px;
             }
@@ -155,10 +301,10 @@ class MethodInfoDialog(QDialog):
         info_text.setReadOnly(True)
         info_text.setHtml("""
         <style>
-            h2 { color: #007ACC; margin-top: 20px; margin-bottom: 10px; }
-            h3 { color: #00CED1; margin-top: 15px; margin-bottom: 5px; }
-            p { color: #E0E0E0; margin: 5px 0; line-height: 1.4; }
-            .category { color: #FFA500; font-weight: bold; }
+            h2 { color: #005A9E; margin-top: 20px; margin-bottom: 10px; }
+            h3 { color: #0078D4; margin-top: 15px; margin-bottom: 5px; }
+            p { color: #000000; margin: 5px 0; line-height: 1.4; }
+            .category { color: #D83B01; font-weight: bold; }
         </style>
         
         <h2>📐 기본 연산 (Basic Operations)</h2>
@@ -248,8 +394,43 @@ class MainWindow(QMainWindow):
         super().__init__()
 
         # .ui 파일 로드
-        ui_path = os.path.join(os.path.dirname(__file__), 'main_window.ui')
+        if getattr(sys, 'frozen', False):
+            # PyInstaller로 패키징된 경우
+            application_path = sys._MEIPASS
+        else:
+            # 일반 Python 스크립트로 실행되는 경우
+            application_path = os.path.dirname(os.path.abspath(__file__))
+            
+        ui_path = os.path.join(application_path, 'main_window.ui')
         uic.loadUi(ui_path, self)
+
+        # QMessageBox 및 공통 다이얼로그 스타일 적용 (Light Theme for Popups)
+        # 기존 스타일시트에 추가
+        current_style = self.styleSheet()
+        popup_style = """
+            QMessageBox {
+                background-color: #FFFFFF;
+                color: #000000;
+            }
+            QMessageBox QLabel {
+                color: #000000;
+            }
+            QMessageBox QPushButton {
+                background-color: #E0E0E0;
+                color: #000000;
+                border: 1px solid #AAAAAA;
+                border-radius: 4px;
+                padding: 4px 12px;
+                min-width: 60px;
+            }
+            QMessageBox QPushButton:hover {
+                background-color: #D0D0D0;
+            }
+            QMessageBox QPushButton:pressed {
+                background-color: #B0B0B0;
+            }
+        """
+        self.setStyleSheet(current_style + popup_style)
 
         # UI 요소 크기 조정 (버튼 텍스트 잘림 방지)
         self.btnTableView.setMinimumWidth(120)
@@ -267,7 +448,93 @@ class MainWindow(QMainWindow):
 
         # 상태 표시줄 설정
         self.statusbar.showMessage("Ready. Please load a data file.")
+        
+        # Copyright 추가
+        # Copyright 추가
+        self.copyright_label = QLabel("(c)2025. G.H.KIM All rights reserved.")
+        self.copyright_label.setStyleSheet("color: white; font-weight: bold; margin-right: 20px; background-color: transparent;")
+        self.statusBar().addPermanentWidget(self.copyright_label)
+        
         self.lblFileInfo.setText("No file loaded")
+        
+        # Full Preview 데이터 저장용 변수
+        self.latest_preview_data = None
+        self.latest_preview_headers = None
+        
+        # Full Preview 버튼 추가 (UI 파일 로드 후)
+        self.setup_full_preview_button()
+        
+        # Preview Results UI 설정 (Section 6)
+        self.setup_preview_results_ui()
+
+    def setup_full_preview_button(self):
+        """Full Preview 버튼을 UI에 동적으로 추가"""
+        # groupModificationPreview 찾기
+        if hasattr(self, 'groupModificationPreview'):
+            # 버튼 생성
+            from PyQt5.QtWidgets import QPushButton
+            self.btnFullPreview = QPushButton("🔍 Full Table View")
+            self.btnFullPreview.setMinimumHeight(24)
+            self.btnFullPreview.setStyleSheet("""
+                QPushButton {
+                    background-color: #3C3C3C;
+                    color: #E0E0E0;
+                    border: 1px solid #555555;
+                    border-radius: 4px;
+                    padding: 4px 12px;
+                }
+                QPushButton:hover {
+                    background-color: #505050;
+                    border-color: #007ACC;
+                }
+            """)
+            self.btnFullPreview.clicked.connect(self.show_full_preview)
+            
+            # previewTableLayout에 추가 (테이블 위에)
+            if hasattr(self, 'previewTableLayout'):
+                self.previewTableLayout.insertWidget(0, self.btnFullPreview)
+
+    def setup_preview_results_ui(self):
+        """Section 6. Preview Results의 Statistics Summary UI 설정"""
+        # 1. Method Label 추가
+        if hasattr(self, 'statsLayout'):
+            self.lblPreviewMethod = QLabel("Method: -")
+            self.lblPreviewMethod.setStyleSheet("color: #007ACC; font-weight: bold; margin-bottom: 5px;")
+            self.statsLayout.insertWidget(0, self.lblPreviewMethod)
+            
+        # 2. Table 설정 (Section 6의 tableStats)
+        if hasattr(self, 'tableStats'):
+            # 컬럼 설정: Metric, Modified
+            self.tableStats.setColumnCount(2)
+            self.tableStats.setHorizontalHeaderLabels(["Metric", "Modified"])
+            self.tableStats.verticalHeader().setVisible(False)
+            
+            # 초기화
+            self.tableStats.setRowCount(4)
+            metrics = ["Min", "Max", "Mean", "Std"]
+            for i, metric in enumerate(metrics):
+                self.tableStats.setItem(i, 0, QTableWidgetItem(metric))
+                self.tableStats.setItem(i, 1, QTableWidgetItem("-"))
+                
+            # 스타일 및 크기 조정
+            self.tableStats.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+            # 가로 길이 고정 제거 및 Expanding 설정
+            self.tableStats.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+            self.tableStats.setStyleSheet("""
+                QTableWidget {
+                    background-color: #1E1E1E;
+                    border: 1px solid #3C3C3C;
+                    color: #E0E0E0;
+                    gridline-color: #3C3C3C;
+                }
+                QHeaderView::section {
+                    background-color: #333337;
+                    color: #AAAAAA;
+                    padding: 2px;
+                    border: none;
+                    font-size: 11px;
+                }
+            """)
 
     def setup_graph(self):
         """Matplotlib 그래프 설정"""
@@ -364,13 +631,14 @@ class MainWindow(QMainWindow):
         stats_label.setStyleSheet("color: white; font-weight: normal; margin-bottom: 3px; font-size: 11px;")
         layout.addWidget(stats_label)
         
-        self.tableStats = QTableWidget(1, 4)
-        self.tableStats.setHorizontalHeaderLabels(["Min", "Max", "Avg", "Std"])
-        self.tableStats.setVerticalHeaderLabels(["Value"])
-        self.tableStats.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.tableStats.verticalHeader().setVisible(False)
-        self.tableStats.setFixedHeight(60)
-        self.tableStats.setStyleSheet("""
+        self.tableQuickStats = QTableWidget(1, 4)
+        self.tableQuickStats.setHorizontalHeaderLabels(["Min", "Max", "Avg", "Std"])
+        self.tableQuickStats.setVerticalHeaderLabels(["Value"])
+        self.tableQuickStats.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.tableQuickStats.verticalHeader().setVisible(False)
+        # self.tableQuickStats.setFixedHeight(100) # Remove fixed height
+        self.tableQuickStats.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.tableQuickStats.setStyleSheet("""
             QTableWidget {
                 background-color: #1E1E1E;
                 border: 1px solid #3C3C3C;
@@ -387,9 +655,9 @@ class MainWindow(QMainWindow):
         """)
         # 초기값 설정
         for col in range(4):
-            self.tableStats.setItem(0, col, QTableWidgetItem("-"))
+            self.tableQuickStats.setItem(0, col, QTableWidgetItem("-"))
             
-        layout.addWidget(self.tableStats)
+        layout.addWidget(self.tableQuickStats, 1) # Stretch factor 1
         
         # 3. 로그 리스트 (History)
         log_label = QLabel("📝 Operation Log")
@@ -409,15 +677,23 @@ class MainWindow(QMainWindow):
             }
         """)
         self.listLog.addItem("Ready. System initialized.")
-        layout.addWidget(self.listLog)
+        # ListWidget을 Expanding으로 설정하여 남은 공간 차지
+        self.listLog.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        layout.addWidget(self.listLog, 1) # Stretch factor 1
         
-        # 4. 왼쪽 패널에 추가 (Spacer 바로 앞에 추가)
-        # leftPanelLayout의 마지막 아이템은 Spacer이므로, count() - 1 위치에 삽입
+        # GroupBox도 Expanding으로 설정
+        self.groupStatsLog.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
+        
+        # 4. 왼쪽 패널에 추가
+        # 기존 Spacer 제거 (마지막 아이템이 Spacer라고 가정)
         count = self.leftPanelLayout.count()
         if count > 0:
-            self.leftPanelLayout.insertWidget(count - 1, self.groupStatsLog)
-        else:
-            self.leftPanelLayout.addWidget(self.groupStatsLog)
+            item = self.leftPanelLayout.itemAt(count - 1)
+            if item.spacerItem():
+                self.leftPanelLayout.removeItem(item)
+                
+        # GroupBox 추가 (Spacer가 제거되었으므로 마지막에 추가하면 됨)
+        self.leftPanelLayout.addWidget(self.groupStatsLog)
 
     def connect_signals(self):
         """시그널-슬롯 연결"""
@@ -453,20 +729,30 @@ class MainWindow(QMainWindow):
         if self.df is None:
             return
             
-        # 첫 번째 숫자형 컬럼 찾기 (Time 제외)
-        target_col = None
+        # 숫자형 컬럼 찾기 (Time 제외)
+        numeric_cols = []
         for col in self.df.columns:
             if col.lower() != 'time' and pd.api.types.is_numeric_dtype(self.df[col]):
-                target_col = col
-                break
+                numeric_cols.append(col)
         
-        if target_col:
-            stats = self.df[target_col].describe()
-            self.tableStats.setItem(0, 0, QTableWidgetItem(f"{stats['min']:.4g}"))
-            self.tableStats.setItem(0, 1, QTableWidgetItem(f"{stats['max']:.4g}"))
-            self.tableStats.setItem(0, 2, QTableWidgetItem(f"{stats['mean']:.4g}"))
-            self.tableStats.setItem(0, 3, QTableWidgetItem(f"{stats['std']:.4g}"))
-            self.add_log(f"Stats updated for column: {target_col}")
+        if numeric_cols:
+            # 테이블 초기화 및 크기 설정
+            self.tableQuickStats.setRowCount(len(numeric_cols))
+            self.tableQuickStats.setVerticalHeaderLabels(numeric_cols)
+            self.tableQuickStats.verticalHeader().setVisible(True) # 컬럼명 표시
+            
+            # 각 컬럼별 통계 계산 및 표시
+            for i, col in enumerate(numeric_cols):
+                stats = self.df[col].describe()
+                self.tableQuickStats.setItem(i, 0, QTableWidgetItem(f"{stats['min']:.4g}"))
+                self.tableQuickStats.setItem(i, 1, QTableWidgetItem(f"{stats['max']:.4g}"))
+                self.tableQuickStats.setItem(i, 2, QTableWidgetItem(f"{stats['mean']:.4g}"))
+                self.tableQuickStats.setItem(i, 3, QTableWidgetItem(f"{stats['std']:.4g}"))
+            
+            self.add_log(f"Stats updated for {len(numeric_cols)} columns")
+        else:
+            self.tableQuickStats.setRowCount(0)
+            self.add_log("No numeric columns found for statistics.")
 
     # ============ 이벤트 핸들러 메서드 ============
 
@@ -483,20 +769,72 @@ class MainWindow(QMainWindow):
             self.load_data(file_path)
 
     def load_data(self, file_path):
-        """데이터 파일 로드"""
+        """데이터 파일 로드 (Thread 사용)"""
+        self.editFilePath.setText(file_path)
+        self.add_log(f"Loading file: {os.path.basename(file_path)}...")
+        
+        # Progress Dialog 표시
+        self.progress_dialog = QProgressDialog("Loading file...", "Cancel", 0, 0, self)
+        self.progress_dialog.setWindowTitle("In progress") # 타이틀 변경
+        self.progress_dialog.setWindowModality(Qt.WindowModal)
+        self.progress_dialog.setMinimumDuration(0) # 즉시 표시
+        self.progress_dialog.setMinimumWidth(400) # 가로 길이 늘림
+        
+        # QPalette를 사용하여 텍스트 색상 강제 설정 (Method 1)
+        palette = QPalette()
+        palette.setColor(QPalette.WindowText, Qt.black)
+        palette.setColor(QPalette.Text, Qt.black)
+        palette.setColor(QPalette.ButtonText, Qt.black)
+        self.progress_dialog.setPalette(palette)
+        
+        # 스타일 설정 (White background, Black text) (Method 2)
+        self.progress_dialog.setStyleSheet("""
+            QProgressDialog {
+                background-color: #FFFFFF;
+                color: #000000;
+            }
+            QProgressDialog QLabel {
+                color: #000000;
+                font-weight: bold;
+                font-size: 14px;
+            }
+            QPushButton {
+                background-color: #E0E0E0;
+                color: #000000;
+                border: 1px solid #AAAAAA;
+                border-radius: 4px;
+                padding: 4px 12px;
+            }
+            QPushButton:hover {
+                background-color: #D0D0D0;
+            }
+            QProgressBar {
+                border: 1px solid #CCCCCC;
+                border-radius: 4px;
+                text-align: center;
+                color: #000000;
+            }
+            QProgressBar::chunk {
+                background-color: #007ACC;
+            }
+        """)
+        
+        self.progress_dialog.show()
+        
+        # 스레드 시작
+        self.loader_thread = FileLoaderThread(file_path)
+        self.loader_thread.finished.connect(self.on_load_finished)
+        self.loader_thread.error.connect(self.on_load_error)
+        self.loader_thread.start()
+
+    def on_load_finished(self, df):
+        """파일 로드 완료 시 호출"""
+        if hasattr(self, 'progress_dialog'):
+            self.progress_dialog.close()
+            
         try:
-            self.editFilePath.setText(file_path)
-            self.add_log(f"Loading file: {os.path.basename(file_path)}...")
-            
-            # 파일 확장자에 따라 로드
-            if file_path.endswith('.csv') or file_path.endswith('.txt'):
-                self.df = pd.read_csv(file_path)
-            elif file_path.endswith('.xlsx') or file_path.endswith('.xls'):
-                self.df = pd.read_excel(file_path)
-            else:
-                raise ValueError("Unsupported file format")
-            
-            self.file_path = file_path
+            self.df = df
+            self.file_path = self.loader_thread.file_path
             
             # UI 업데이트
             rows, cols = self.df.shape
@@ -529,10 +867,17 @@ class MainWindow(QMainWindow):
             
             # 그래프 초기화
             self.update_graph_from_selection()
-                
+            
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to load file:\n{str(e)}")
-            self.add_log(f"Error loading file: {str(e)}")
+            self.on_load_error(str(e))
+
+    def on_load_error(self, error_msg):
+        """파일 로드 실패 시 호출"""
+        if hasattr(self, 'progress_dialog'):
+            self.progress_dialog.close()
+            
+        QMessageBox.critical(self, "Error", f"Failed to load file:\n{error_msg}")
+        self.add_log(f"Error loading file: {error_msg}")
 
     def update_graph_from_selection(self):
         """선택된 컬럼에 따라 그래프 업데이트"""
@@ -604,27 +949,6 @@ class MainWindow(QMainWindow):
         # 여기서는 단순화를 위해 남겨두되, 실제로는 위 함수가 주도함.
         pass
 
-    def on_method_changed(self, method):
-        """수정 방법 변경 시 UI 업데이트"""
-        # 기본 연산일 때만 Value 입력 표시
-        is_basic_op = method in ["Multiplication", "Division", "Addition", "Subtraction"]
-        self.lblMethodValue.setVisible(is_basic_op)
-        self.spinMethodValue.setVisible(is_basic_op)
-        
-        # 설명 업데이트
-        descriptions = {
-            "Multiplication": "Multiply selected data by value.",
-            "Division": "Divide selected data by value.",
-            "Addition": "Add value to selected data.",
-            "Subtraction": "Subtract value from selected data.",
-            "Linear": "Linear interpolation (Upsampling).",
-            "Cubic": "Cubic spline interpolation (Upsampling).",
-            "Nearest": "Nearest neighbor interpolation (Upsampling).",
-            "Average": "Average resampling (Downsampling).",
-            "Max": "Max value resampling (Downsampling).",
-            "Min": "Min value resampling (Downsampling)."
-        }
-        self.lblMethodDescription.setText(descriptions.get(method, ""))
 
     def update_conversion_factor(self):
         """단위 변환 계수 업데이트"""
@@ -809,10 +1133,10 @@ class MainWindow(QMainWindow):
                         else:
                             filtered_data[i] = alpha * (filtered_data[i-1] + data[i] - data[i-1])
                             
-                result_df[col] = filtered_data
-            
+            result_df[col] = filtered_data
+        
         # 2. Upsampling (Ratio > 1)
-        elif method in ["Linear", "Cubic", "Nearest", "Next", "Previous", "PCHIP", "V5Cubic", "Makima", "Spline"]:
+        elif method in ["Linear", "Cubic", "Nearest", "Next", "Previous", "PCHIP", "V5Cubic", "Makima", "Spline", "ZeroFill"]:
             if ratio <= 1:
                 return result_df # Upsampling requires ratio > 1
                 
@@ -860,6 +1184,14 @@ class MainWindow(QMainWindow):
                             else:
                                 f = CubicSpline(old_indices, y)
                             new_data[col] = f(new_indices)
+                        elif method == "ZeroFill":
+                            # 0으로 초기화
+                            filled_data = np.zeros(new_length)
+                            for i, val in enumerate(result_df[col].values):
+                                new_idx = int(round(i * ratio))
+                                if new_idx < new_length:
+                                    filled_data[new_idx] = val
+                            new_data[col] = filled_data
                         else:
                             # Default to Linear
                             new_data[col] = np.interp(new_indices, old_indices, y)
@@ -874,6 +1206,14 @@ class MainWindow(QMainWindow):
                         # Nearest implementation using numpy
                         idx = np.abs(np.subtract.outer(new_indices, old_indices)).argmin(1)
                         new_data[col] = result_df[col].values[idx]
+                    elif method == "ZeroFill":
+                         # 0으로 초기화
+                        filled_data = np.zeros(new_length)
+                        for i, val in enumerate(result_df[col].values):
+                            new_idx = int(round(i * ratio))
+                            if new_idx < new_length:
+                                filled_data[new_idx] = val
+                        new_data[col] = filled_data
                     else:
                         # Default to Linear
                         new_data[col] = np.interp(new_indices, old_indices, result_df[col])
@@ -890,8 +1230,6 @@ class MainWindow(QMainWindow):
             if group_size < 1: group_size = 1
             
             # 정수 인덱스 기반 그룹화
-            # numeric_only=True는 groupby 메서드가 아니라 집계 함수(mean, max 등)에 전달해야 할 수도 있음
-            # 하지만 위에서 이미 to_numeric으로 변환했으므로 안전함.
             grouped = result_df.groupby(np.arange(len(result_df)) // group_size)
             
             if method == "Average":
@@ -904,7 +1242,7 @@ class MainWindow(QMainWindow):
         return result_df
 
     def preview_modification(self):
-        """수정 결과 미리보기 (그래프에 빨간색 라인 표시)"""
+        """수정 결과 미리보기 (그래프 및 테이블 업데이트)"""
         if self.df is None: return
         
         try:
@@ -916,7 +1254,7 @@ class MainWindow(QMainWindow):
             method_text = self.comboMethod.currentText()
             method = method_text.split()[0]
             
-            # Value 파싱 (기본 연산일 때만 필요하지만, 미리 파싱)
+            # Value 파싱
             try:
                 value = float(self.editValue.text())
             except ValueError:
@@ -935,44 +1273,169 @@ class MainWindow(QMainWindow):
                 QMessageBox.warning(self, "Warning", "Please select at least one column.")
                 return
 
-            # 3. 데이터 서브셋 추출
-            # 원본 데이터 전체 복사 (그래프 표시용)
-            # 여기서는 첫 번째 선택된 컬럼만 그래프에 표시한다고 가정 (복잡도 감소)
-            target_col = selected_cols[0]
-            subset = self.df[target_col].iloc[start_row:end_row]
-            
-            # 4. 수정 로직 적용
-            modified_subset = self.apply_modification(pd.DataFrame(subset), method, value, ratio)
-            
-            # 5. 그래프 업데이트 (빨간색 점선)
-            # X축 계산: 원본 인덱스 위치에 맞춰서 표시
-            # Upsampling/Downsampling의 경우 X축 간격이 달라짐
+            # 3. 기존 미리보기 라인 제거
+            # 리스트를 복사해서 순회해야 삭제 시 문제 없음
+            lines_to_remove = [line for line in self.ax.lines if line.get_label() == 'Preview']
+            for line in lines_to_remove:
+                line.remove()
+
+            # 4. 각 컬럼별 수정 로직 적용 및 그래프 표시
+            preview_data_list = [] # (col_name, modified_subset) 튜플 저장
+            all_modified_values = [] # 통계 계산용
             
             # 원본 X축 범위
             x_start = start_row
             x_end = end_row
             
-            # 수정된 데이터의 X축 생성
-            modified_len = len(modified_subset)
-            modified_x = np.linspace(x_start, x_end, modified_len)
-            
-            # 기존 미리보기 라인 제거
-            for line in self.ax.lines:
-                if line.get_label() == 'Preview':
-                    line.remove()
-            
-            self.ax.plot(modified_x, modified_subset.iloc[:, 0], 'r--', label='Preview', linewidth=1.5)
-            
-            # 범례 업데이트
+            for col in selected_cols:
+                subset = self.df[col].iloc[start_row:end_row]
+                
+                # 수정 로직 적용
+                modified_subset_df = self.apply_modification(pd.DataFrame(subset), method, value, ratio)
+                modified_subset = modified_subset_df[col]
+                
+                # 그래프 업데이트
+                modified_len = len(modified_subset)
+                modified_x = np.linspace(x_start, x_end, modified_len)
+                
+                # 빨간색 점선으로 표시 (alpha값으로 겹침 표현)
+                self.ax.plot(modified_x, modified_subset, 'r--', label='Preview', linewidth=1.5, alpha=0.7)
+                
+                # 데이터 저장 (테이블용)
+                preview_data_list.append((col, modified_subset))
+                all_modified_values.extend(modified_subset.values)
+
+            # 범례 업데이트 (중복 제거)
             handles, labels = self.ax.get_legend_handles_labels()
             by_label = dict(zip(labels, handles))
             self.ax.legend(by_label.values(), by_label.keys(), loc='upper left', facecolor='#2D2D30', edgecolor='#555555', labelcolor='white')
             
             self.canvas.draw()
-            self.add_log(f"Preview: {method} on {target_col} ({start_row}~{end_row})")
             
+            # 5. 테이블 미리보기 업데이트 (모든 선택된 컬럼 표시)
+            if hasattr(self, 'tablePreview') and preview_data_list:
+                self.tablePreview.clear()
+                
+                # 헤더 설정 (선택된 모든 컬럼)
+                headers = [item[0] for item in preview_data_list]
+                self.tablePreview.setColumnCount(len(headers))
+                self.tablePreview.setHorizontalHeaderLabels(headers)
+                
+                # 데이터 채우기 (최대 100행)
+                # 첫 번째 컬럼 기준으로 행 수 결정 (모든 컬럼이 동일한 변환을 거치므로 길이는 같음)
+                first_subset = preview_data_list[0][1]
+                max_rows = min(len(first_subset), 100)
+                self.tablePreview.setRowCount(max_rows)
+                
+                for i in range(max_rows):
+                    for col_idx, (col_name, mod_subset) in enumerate(preview_data_list):
+                        val = mod_subset.iloc[i]
+                        self.tablePreview.setItem(i, col_idx, QTableWidgetItem(f"{val:.4f}"))
+                        
+                # 컬럼 너비 자동 조정 (Stretch) - 짤림 방지
+                self.tablePreview.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+                
+            # 6. Statistics Summary 업데이트 (Section 6)
+            if hasattr(self, 'tableStats'):
+                # Method Label 업데이트
+                if hasattr(self, 'lblPreviewMethod'):
+                    self.lblPreviewMethod.setText(f"Method: {method}")
+                
+                # 통계 계산 (전체 선택된 컬럼의 수정된 값 기준)
+                if all_modified_values:
+                    vals = np.array(all_modified_values)
+                    stats = {
+                        "Min": np.min(vals),
+                        "Max": np.max(vals),
+                        "Mean": np.mean(vals),
+                        "Std": np.std(vals)
+                    }
+                    
+                    # 테이블 업데이트
+                    metrics = ["Min", "Max", "Mean", "Std"]
+                    for i, metric in enumerate(metrics):
+                        self.tableStats.setItem(i, 1, QTableWidgetItem(f"{stats[metric]:.4g}"))
+            
+            # Full Preview 데이터 준비 (전체 DataFrame)
+            # get_modified_dataframe을 사용하여 전체 수정된 DF 생성
+            self.latest_preview_original = self.df
+            self.latest_preview_modified = self.get_modified_dataframe(
+                self.df, method, value, ratio, start_row, end_row, selected_cols
+            )
+        
+            self.add_log(f"Preview: {method} on {len(selected_cols)} columns ({start_row}~{end_row})")
+        
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Preview failed: {str(e)}")
+
+    def show_full_preview(self):
+        """전체 미리보기 데이터를 팝업으로 표시"""
+        if hasattr(self, 'latest_preview_original') and hasattr(self, 'latest_preview_modified') and \
+           self.latest_preview_original is not None and self.latest_preview_modified is not None:
+            
+            dialog = TableViewDialog(self, original_df=self.latest_preview_original, modified_df=self.latest_preview_modified)
+            dialog.exec_()
+        else:
+            QMessageBox.information(self, "Info", "No preview data available. Please click 'Preview' first.")
+
+    def get_modified_dataframe(self, df, method, value, ratio, start_row, end_row, selected_cols):
+        """
+        주어진 파라미터로 수정된 전체 데이터프레임을 생성하여 반환
+        (Preview 및 Execute 공용 로직)
+        """
+        if df is None: return None
+        
+        # 복사본 생성
+        result_df = df.copy()
+        
+        # 1. 데이터 서브셋 추출
+        subset = result_df.iloc[start_row:end_row][selected_cols]
+        
+        # 2. 수정 로직 적용
+        modified_subset = self.apply_modification(subset, method, value, ratio)
+        
+        # 3. 데이터프레임 병합
+        # 길이가 같은 경우 (Basic Ops)
+        if len(modified_subset) == len(subset):
+            # 선택된 컬럼만 업데이트
+            for col in selected_cols:
+                # FutureWarning 방지: int 컬럼에 float 값을 넣을 때 발생하는 경고 해결
+                # 만약 원본이 int이고 수정된 값이 float라면, 원본 컬럼을 float로 변환
+                if pd.api.types.is_integer_dtype(result_df[col]) and pd.api.types.is_float_dtype(modified_subset[col]):
+                    result_df[col] = result_df[col].astype(float)
+                
+                result_df.loc[start_row:end_row-1, col] = modified_subset[col].values
+        else:
+            # 길이가 다른 경우 (Resampling) -> DataFrame 재구성 필요
+            # Part 1: Start 이전
+            df_start = result_df.iloc[:start_row]
+            # Part 3: End 이후
+            df_end = result_df.iloc[end_row:]
+            
+            # Part 2: Modified Middle
+            # 선택되지 않은 컬럼도 동기화 필요
+            new_parts = []
+            for col in result_df.columns:
+                col_data = result_df.iloc[start_row:end_row][[col]]
+                
+                if col in selected_cols:
+                    mod_data = self.apply_modification(col_data, method, value, ratio)
+                else:
+                    # 선택 안 된 컬럼도 길이를 맞춰야 함 (동기화)
+                    # Upsampling 시 "ZeroFill" 사용 (선택 안된 데이터는 0으로 채움)
+                    sync_method = "ZeroFill" if ratio > 1 else "Average"
+                    mod_data = self.apply_modification(col_data, sync_method, value, ratio)
+                
+                # 여기서도 타입 변환이 필요할 수 있지만, concat 시 자동으로 처리됨 (보통)
+                # 하지만 명시적으로 처리하는 것이 안전함
+                new_parts.append(mod_data.reset_index(drop=True))
+            
+            modified_middle = pd.concat(new_parts, axis=1)
+            
+            # 합치기
+            result_df = pd.concat([df_start, modified_middle, df_end]).reset_index(drop=True)
+            
+        return result_df
 
     def execute_modification(self):
         """수정 사항 적용 (데이터프레임 업데이트)"""
@@ -1006,69 +1469,20 @@ class MainWindow(QMainWindow):
                     if chk.isChecked():
                         selected_cols.append(chk.text())
             
-            # 3. 수정 적용
-            # 주의: Upsampling/Downsampling은 행 개수가 바뀌므로 전체 DF 구조가 바뀔 수 있음
-            # 여기서는 "선택된 구간만 교체"하는 것이 기본이지만, 
-            # 길이가 바뀌면 Insert/Delete가 필요함.
+            # 3. 수정된 데이터프레임 생성 (Helper 사용)
+            new_df = self.get_modified_dataframe(self.df, method, value, ratio, start_row, end_row, selected_cols)
             
-            # 단순화를 위해: 길이가 바뀌는 연산(Up/Down)은 "전체 구간"에 대해서만 허용하거나,
-            # 또는 해당 구간을 잘라내고 새 데이터를 끼워넣음.
-            
-            # 데이터 처리
-            subset = self.df.iloc[start_row:end_row][selected_cols]
-            
-            modified_subset = self.apply_modification(subset, method, value, ratio)
-            
-            # 4. 데이터프레임 병합
-            # 길이가 같은 경우 (Basic Ops)
-            if len(modified_subset) == len(subset):
-                # 선택된 컬럼만 업데이트
-                for col in selected_cols:
-                    self.df.loc[start_row:end_row-1, col] = modified_subset[col].values
-            else:
-                # 길이가 다른 경우 (Resampling) -> DataFrame 재구성 필요
-                # Part 1: Start 이전
-                df_start = self.df.iloc[:start_row]
-                # Part 3: End 이후
-                df_end = self.df.iloc[end_row:]
+            if new_df is not None:
+                self.df = new_df
+                self.add_log(f"Executed: {method} on rows {start_row}~{end_row}")
                 
-                # Part 2: Modified (선택되지 않은 컬럼은 어떻게? -> 보통 Resampling은 전체 Row에 영향)
-                # 만약 특정 컬럼만 Resampling하면 다른 컬럼과 길이가 안 맞음 -> 에러 또는 NaN 채움
-                # 여기서는 "선택된 컬럼만 수정"하되, 다른 컬럼은 해당 구간을 삭제하거나 보간해야 함.
-                # 복잡성을 피하기 위해, Resampling 시에는 "다른 컬럼도 동일 비율로 처리"하거나 경고.
+                # UI 리프레시
+                self.update_statistics()
+                # 그래프 리프레시
+                self.update_graph_from_selection()
                 
-                # 전략: Resampling은 선택된 컬럼만 처리하고, 결과 DF는 선택된 컬럼만 남김 (또는 사용자에게 알림)
-                # 여기서는 "선택된 컬럼만으로 새 DF 생성" + "나머지 컬럼은 버림" (가장 안전)
-                # 또는 "전체 컬럼에 대해 동일 연산 적용" (사용자가 모든 컬럼 체크했다고 가정)
-                
-                # 개선: Resampling일 경우, 선택되지 않은 컬럼도 자동으로 동일한 방식(Linear/Average)으로 처리하여 길이를 맞춤.
-                
-                new_parts = []
-                for col in self.df.columns:
-                    col_data = self.df.iloc[start_row:end_row][[col]]
-                    # 선택된 컬럼은 지정된 메서드로, 아니면 기본(Linear/Average)로 처리하여 길이 맞춤
-                    if col in selected_cols:
-                        mod_data = self.apply_modification(col_data, method, value, ratio)
-                    else:
-                        # 선택 안 된 컬럼도 길이를 맞춰야 함 (동기화)
-                        sync_method = "Linear" if ratio > 1 else "Average"
-                        mod_data = self.apply_modification(col_data, sync_method, value, ratio)
-                    new_parts.append(mod_data.reset_index(drop=True))
-                
-                modified_middle = pd.concat(new_parts, axis=1)
-                
-                # 합치기
-                self.df = pd.concat([df_start, modified_middle, df_end]).reset_index(drop=True)
-
-            self.add_log(f"Executed: {method} on rows {start_row}~{end_row}")
-            
-            # UI 리프레시
-            self.update_statistics()
-            # 그래프 리프레시
-            self.update_graph_from_selection()
-            
-            # Row End 업데이트 (길이가 변했을 수 있음)
-            self.editRowEnd.setText(str(len(self.df)))
+                # Row End 업데이트 (길이가 변했을 수 있음)
+                self.editRowEnd.setText(str(len(self.df)))
             
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Execution failed: {str(e)}")
@@ -1077,16 +1491,40 @@ class MainWindow(QMainWindow):
         """데이터 저장"""
         if self.df is None: return
         
+        # 선택된 포맷 가져오기
+        selected_format = self.comboFormat.currentText() # .xlsx, .csv, .txt
+        
+        # 파일 필터 설정
+        filter_str = ""
+        if selected_format == ".xlsx":
+            filter_str = "Excel Files (*.xlsx)"
+        elif selected_format == ".csv":
+            filter_str = "CSV Files (*.csv)"
+        elif selected_format == ".txt":
+            filter_str = "Text Files (*.txt)"
+        else:
+            filter_str = "All Files (*)"
+            
+        # 저장 대화상자 열기
         file_path, _ = QFileDialog.getSaveFileName(
-            self, "Save Data", "", "CSV Files (*.csv);;Excel Files (*.xlsx)"
+            self, "Save Data", "", filter_str
         )
         
         if file_path:
             try:
+                # 확장자 강제 적용 (사용자가 입력하지 않은 경우)
+                if not file_path.lower().endswith(selected_format.lower()):
+                    file_path += selected_format
+                
                 if file_path.endswith('.csv'):
                     self.df.to_csv(file_path, index=False)
                 elif file_path.endswith('.xlsx'):
                     self.df.to_excel(file_path, index=False)
+                elif file_path.endswith('.txt'):
+                    # TXT는 CSV 형식(콤마 구분) 또는 TSV(탭 구분)로 저장 가능
+                    # 여기서는 CSV와 동일하게 저장하되 확장자만 txt로 함
+                    self.df.to_csv(file_path, index=False)
+                    
                 self.add_log(f"Saved to {file_path}")
                 QMessageBox.information(self, "Success", "File saved successfully.")
             except Exception as e:
