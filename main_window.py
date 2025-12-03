@@ -15,7 +15,7 @@ from PyQt5.QtWidgets import (
     QVBoxLayout, QDialog, QTableWidget, QTableWidgetItem,
     QHeaderView, QDialogButtonBox, QLabel, QTextEdit,
     QGroupBox, QListWidget, QSizePolicy, QProgressBar,
-    QWidget, QHBoxLayout, QPushButton
+    QWidget, QHBoxLayout
 )
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QObject
 from PyQt5.QtGui import QColor, QIcon, QFont
@@ -29,123 +29,6 @@ try:
     SCIPY_AVAILABLE = True
 except ImportError:
     SCIPY_AVAILABLE = False
-
-
-class DarkMessageBox(QDialog):
-    """검정 테마의 커스텀 메시지 박스"""
-    def __init__(self, parent=None, title="Message", text=""):
-        super().__init__(parent)
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
-        self.setModal(True)
-        self.setFixedSize(400, 200)
-        
-        # 스타일 설정
-        self.setStyleSheet("""
-            QDialog {
-                background-color: black;
-                border: 1px solid #333333;
-            }
-            QLabel {
-                color: white;
-                font-family: 'Segoe UI';
-            }
-            QPushButton {
-                background-color: #007ACC;
-                color: white;
-                border: none;
-                border-radius: 4px;
-                padding: 5px 20px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #1E90FF;
-            }
-        """)
-        
-        # 메인 레이아웃
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
-        
-        # 타이틀바
-        title_bar = QWidget()
-        title_bar.setStyleSheet("background-color: black; border-bottom: 1px solid #333333;")
-        title_bar.setFixedHeight(35)
-        
-        title_layout = QHBoxLayout(title_bar)
-        title_layout.setContentsMargins(10, 0, 5, 0)
-        
-        title_label = QLabel(title)
-        title_label.setStyleSheet("font-weight: bold; border: none;")
-        title_layout.addWidget(title_label)
-        
-        title_layout.addStretch()
-        
-        # 닫기 버튼 (X)
-        btn_close = QPushButton("✕")
-        btn_close.setFixedSize(30, 30)
-        btn_close.setStyleSheet("""
-            QPushButton {
-                background-color: transparent;
-                color: #AAAAAA;
-                font-size: 14px;
-                padding: 0;
-            }
-            QPushButton:hover {
-                background-color: #C42B1C;
-                color: white;
-            }
-        """)
-        btn_close.clicked.connect(self.close)
-        title_layout.addWidget(btn_close)
-        
-        layout.addWidget(title_bar)
-        
-        # 콘텐츠 영역
-        content_widget = QWidget()
-        content_layout = QVBoxLayout(content_widget)
-        content_layout.setContentsMargins(20, 20, 20, 20)
-        
-        # 메시지 텍스트
-        msg_label = QLabel(text)
-        msg_label.setWordWrap(True)
-        msg_label.setAlignment(Qt.AlignCenter)
-        msg_label.setStyleSheet("border: none; font-size: 14px; margin: 10px;")
-        content_layout.addWidget(msg_label)
-        
-        # OK 버튼
-        btn_ok = QPushButton("OK")
-        btn_ok.clicked.connect(self.accept)
-        btn_ok.setFixedWidth(100)
-        
-        btn_layout = QHBoxLayout()
-        btn_layout.addStretch()
-        btn_layout.addWidget(btn_ok)
-        btn_layout.addStretch()
-        
-        content_layout.addLayout(btn_layout)
-        layout.addWidget(content_widget)
-        
-        # 드래그 이동 지원
-        self.old_pos = None
-
-    def mousePressEvent(self, event):
-        if event.button() == Qt.LeftButton and self.layout().itemAt(0).widget().geometry().contains(event.pos()):
-            self.old_pos = event.globalPos()
-
-    def mouseMoveEvent(self, event):
-        if self.old_pos:
-            delta = event.globalPos() - self.old_pos
-            self.move(self.pos() + delta)
-            self.old_pos = event.globalPos()
-
-    def mouseReleaseEvent(self, event):
-        self.old_pos = None
-
-    @staticmethod
-    def warning(parent, title, text):
-        dlg = DarkMessageBox(parent, title, text)
-        dlg.exec_()
 
 
 class TableViewDialog(QDialog):
@@ -208,8 +91,9 @@ class TableViewDialog(QDialog):
             self.table.setHorizontalHeaderLabels(headers)
             self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
             
-            # 데이터 채우기 (모든 데이터 표시)
-            for row in range(len(data)):
+            # 데이터 채우기 (최대 1000행까지만 표시하여 성능 최적화)
+            max_rows = min(len(data), 1000)
+            for row in range(max_rows):
                 for col, value in enumerate(data[row]):
                     self.table.setItem(row, col, QTableWidgetItem(str(value)))
         
@@ -1472,7 +1356,7 @@ class MainWindow(QMainWindow):
             dialog = TableViewDialog(self, self.df.values, self.df.columns.tolist())
             dialog.exec_()
         else:
-            DarkMessageBox.warning(self, "Warning", "No data loaded.")
+            QMessageBox.warning(self, "Warning", "No data loaded.")
 
     def show_method_info(self):
         """수정 방법 설명 다이얼로그 표시"""
