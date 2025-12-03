@@ -31,8 +31,9 @@ def main():
     app = QApplication(sys.argv)
 
     # 스플래시 화면 표시
-    icon_path = os.path.join(os.path.dirname(__file__), 'ProgramIcon.ico')
+    icon_path = os.path.join(os.path.dirname(__file__), 'ProgramIcon.png')
     splash_pix = QPixmap(icon_path)
+    splash_pix = splash_pix.scaled(500, 500, Qt.KeepAspectRatio, Qt.SmoothTransformation)
     splash = QSplashScreen(splash_pix, Qt.WindowStaysOnTopHint)
     splash.show()
     app.processEvents()
