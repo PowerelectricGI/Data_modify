@@ -14,10 +14,11 @@ from PyQt5.QtWidgets import (
     QMainWindow, QFileDialog, QMessageBox, QCheckBox,
     QVBoxLayout, QDialog, QTableWidget, QTableWidgetItem,
     QHeaderView, QDialogButtonBox, QLabel, QTextEdit,
-    QGroupBox, QListWidget, QSizePolicy
+    QGroupBox, QListWidget, QSizePolicy, QProgressBar,
+    QWidget, QHBoxLayout
 )
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QColor
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QObject
+from PyQt5.QtGui import QColor, QIcon, QFont
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
@@ -229,10 +230,92 @@ class MethodInfoDialog(QDialog):
         
         layout.addWidget(info_text)
         
-        # 닫기 버튼
         button_box = QDialogButtonBox(QDialogButtonBox.Close)
         button_box.rejected.connect(self.close)
         layout.addWidget(button_box)
+
+
+class LoadingDialog(QDialog):
+    """데이터 로딩 중 표시할 커스텀 다이얼로그 (검정 테마)"""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
+        self.setModal(True)
+        self.setFixedSize(300, 150)
+        
+        # 스타일 설정 (검정 배경, 흰색 글자)
+        self.setStyleSheet("""
+            QDialog {
+                background-color: black;
+                border: 1px solid #333333;
+            }
+            QLabel {
+                color: white;
+                font-family: 'Segoe UI';
+            }
+            QProgressBar {
+                border: 1px solid #333333;
+                background-color: #1E1E1E;
+                text-align: center;
+                color: white;
+            }
+            QProgressBar::chunk {
+                background-color: #007ACC;
+            }
+        """)
+        
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        
+        # 커스텀 타이틀바
+        title_bar = QWidget()
+        title_bar.setStyleSheet("background-color: black; border-bottom: 1px solid #333333;")
+        title_bar.setFixedHeight(30)
+        title_layout = QHBoxLayout(title_bar)
+        title_layout.setContentsMargins(10, 0, 0, 0)
+        
+        title_label = QLabel("In Progress")
+        title_label.setStyleSheet("font-weight: bold;")
+        title_layout.addWidget(title_label)
+        
+        layout.addWidget(title_bar)
+        
+        # 내용 영역
+        content_widget = QWidget()
+        content_layout = QVBoxLayout(content_widget)
+        content_layout.setContentsMargins(20, 20, 20, 20)
+        content_layout.setSpacing(15)
+        
+        self.msg_label = QLabel("Loading data...\nPlease wait.")
+        self.msg_label.setAlignment(Qt.AlignCenter)
+        content_layout.addWidget(self.msg_label)
+        
+        self.progress = QProgressBar()
+        self.progress.setRange(0, 0) # Indeterminate mode
+        content_layout.addWidget(self.progress)
+        
+        layout.addWidget(content_widget)
+
+class DataLoader(QObject):
+    """백그라운드 데이터 로딩을 위한 워커 클래스"""
+    finished = pyqtSignal(object) # DataFrame or Exception
+    
+    def __init__(self, file_path):
+        super().__init__()
+        self.file_path = file_path
+        
+    def run(self):
+        try:
+            if self.file_path.endswith('.csv') or self.file_path.endswith('.txt'):
+                df = pd.read_csv(self.file_path)
+            elif self.file_path.endswith('.xlsx') or self.file_path.endswith('.xls'):
+                df = pd.read_excel(self.file_path)
+            else:
+                raise ValueError("Unsupported file format")
+            self.finished.emit(df)
+        except Exception as e:
+            self.finished.emit(e)
 
 
 class MainWindow(QMainWindow):
@@ -250,6 +333,10 @@ class MainWindow(QMainWindow):
         # .ui 파일 로드
         ui_path = os.path.join(os.path.dirname(__file__), 'main_window.ui')
         uic.loadUi(ui_path, self)
+
+        # 아이콘 설정
+        icon_path = os.path.join(os.path.dirname(__file__), 'ProgramIcon.ico')
+        self.setWindowIcon(QIcon(icon_path))
 
         # UI 요소 크기 조정 (버튼 텍스트 잘림 방지)
         self.btnTableView.setMinimumWidth(120)
@@ -356,6 +443,9 @@ class MainWindow(QMainWindow):
             }
         """)
         
+        # 세로로 늘어나도록 설정
+        self.groupStatsLog.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
+        
         layout = QVBoxLayout(self.groupStatsLog)
         layout.setSpacing(10)
         
@@ -369,7 +459,8 @@ class MainWindow(QMainWindow):
         self.tableStats.setVerticalHeaderLabels(["Value"])
         self.tableStats.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.tableStats.verticalHeader().setVisible(False)
-        self.tableStats.setFixedHeight(60)
+        # self.tableStats.setFixedHeight(60) # 고정 높이 제거
+        self.tableStats.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.tableStats.setStyleSheet("""
             QTableWidget {
                 background-color: #1E1E1E;
@@ -389,7 +480,7 @@ class MainWindow(QMainWindow):
         for col in range(4):
             self.tableStats.setItem(0, col, QTableWidgetItem("-"))
             
-        layout.addWidget(self.tableStats)
+        layout.addWidget(self.tableStats, 1) # Stretch 1
         
         # 3. 로그 리스트 (History)
         log_label = QLabel("📝 Operation Log")
@@ -408,16 +499,21 @@ class MainWindow(QMainWindow):
                 padding: 4px;
             }
         """)
+        self.listLog.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.listLog.addItem("Ready. System initialized.")
-        layout.addWidget(self.listLog)
+        layout.addWidget(self.listLog, 1) # Stretch 1
         
-        # 4. 왼쪽 패널에 추가 (Spacer 바로 앞에 추가)
-        # leftPanelLayout의 마지막 아이템은 Spacer이므로, count() - 1 위치에 삽입
+        # 4. 왼쪽 패널에 추가 (Spacer 제거 후 추가)
+        # 기존 Spacer 제거하여 GroupBox가 남은 공간을 차지하도록 함
         count = self.leftPanelLayout.count()
         if count > 0:
-            self.leftPanelLayout.insertWidget(count - 1, self.groupStatsLog)
-        else:
-            self.leftPanelLayout.addWidget(self.groupStatsLog)
+            # 마지막 아이템(Spacer) 제거
+            item = self.leftPanelLayout.takeAt(count - 1)
+            if item.widget():
+                # 만약 위젯이라면 다시 넣어줌 (Spacer가 아닐 경우 대비)
+                self.leftPanelLayout.addWidget(item.widget())
+                
+        self.leftPanelLayout.addWidget(self.groupStatsLog)
 
     def connect_signals(self):
         """시그널-슬롯 연결"""
@@ -483,20 +579,44 @@ class MainWindow(QMainWindow):
             self.load_data(file_path)
 
     def load_data(self, file_path):
-        """데이터 파일 로드"""
+        """데이터 파일 로드 (Threaded)"""
+        self.editFilePath.setText(file_path)
+        self.add_log(f"Loading file: {os.path.basename(file_path)}...")
+        
+        # 로딩 다이얼로그 표시
+        self.loading_dialog = LoadingDialog(self)
+        self.loading_dialog.show()
+        
+        # 스레드 설정
+        self.thread = QThread()
+        self.worker = DataLoader(file_path)
+        self.worker.moveToThread(self.thread)
+        
+        # 시그널 연결
+        self.thread.started.connect(self.worker.run)
+        self.worker.finished.connect(self.on_data_loaded)
+        self.worker.finished.connect(self.thread.quit)
+        self.worker.finished.connect(self.worker.deleteLater)
+        self.thread.finished.connect(self.thread.deleteLater)
+        
+        # 스레드 시작
+        self.thread.start()
+
+    def on_data_loaded(self, result):
+        """데이터 로드 완료 시 콜백"""
+        # 다이얼로그 닫기
+        if hasattr(self, 'loading_dialog'):
+            self.loading_dialog.close()
+            
+        if isinstance(result, Exception):
+            QMessageBox.critical(self, "Error", f"Failed to load file:\n{str(result)}")
+            self.add_log(f"Error loading file: {str(result)}")
+            return
+            
+        # 정상 로드
         try:
-            self.editFilePath.setText(file_path)
-            self.add_log(f"Loading file: {os.path.basename(file_path)}...")
-            
-            # 파일 확장자에 따라 로드
-            if file_path.endswith('.csv') or file_path.endswith('.txt'):
-                self.df = pd.read_csv(file_path)
-            elif file_path.endswith('.xlsx') or file_path.endswith('.xls'):
-                self.df = pd.read_excel(file_path)
-            else:
-                raise ValueError("Unsupported file format")
-            
-            self.file_path = file_path
+            self.df = result
+            self.file_path = self.editFilePath.text()
             
             # UI 업데이트
             rows, cols = self.df.shape
@@ -529,10 +649,10 @@ class MainWindow(QMainWindow):
             
             # 그래프 초기화
             self.update_graph_from_selection()
-                
+            
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to load file:\n{str(e)}")
-            self.add_log(f"Error loading file: {str(e)}")
+            QMessageBox.critical(self, "Error", f"Error updating UI:\n{str(e)}")
+            self.add_log(f"Error updating UI: {str(e)}")
 
     def update_graph_from_selection(self):
         """선택된 컬럼에 따라 그래프 업데이트"""

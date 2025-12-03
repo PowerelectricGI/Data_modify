@@ -58,7 +58,7 @@ coverage.xml
 #*.md
 *.pdf
 *.pptx
-*.png
+#*.png
 
 # Office temporary files
 ~$*.pptx
@@ -77,3 +77,5 @@ coverage.xml
 output/
 exports/
 temp/
+ProgramIcon.png
+ProgramIcon.ico

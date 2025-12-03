@@ -8,9 +8,10 @@ Version: 1.0.0
 """
 
 import sys
-from PyQt5.QtWidgets import QApplication
+import os
+from PyQt5.QtWidgets import QApplication, QSplashScreen
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QFont
+from PyQt5.QtGui import QFont, QPixmap
 from main_window import MainWindow
 
 
@@ -29,6 +30,13 @@ def main():
     # Qt 애플리케이션 인스턴스 생성
     app = QApplication(sys.argv)
 
+    # 스플래시 화면 표시
+    icon_path = os.path.join(os.path.dirname(__file__), 'ProgramIcon.ico')
+    splash_pix = QPixmap(icon_path)
+    splash = QSplashScreen(splash_pix, Qt.WindowStaysOnTopHint)
+    splash.show()
+    app.processEvents()
+
     # 애플리케이션 정보 설정
     app.setApplicationName("Data Modification Tool")
     app.setApplicationVersion("1.0.0")
@@ -39,8 +47,12 @@ def main():
     app.setFont(default_font)
 
     # 메인 윈도우 생성 및 표시
+    # 메인 윈도우 생성 및 표시
     window = MainWindow()
     window.show()
+    
+    # 스플래시 화면 종료
+    splash.finish(window)
 
     # 이벤트 루프 시작
     sys.exit(app.exec_())
