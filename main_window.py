@@ -451,7 +451,7 @@ class MainWindow(QMainWindow):
         uic.loadUi(ui_path, self)
 
         # 아이콘 설정
-        icon_path = os.path.join(os.path.dirname(__file__), 'ProgramIcon.ico')
+        icon_path = os.path.join(os.path.dirname(__file__), 'ProgramIcon.png')
         self.setWindowIcon(QIcon(icon_path))
 
         # UI 요소 크기 조정 (버튼 텍스트 잘림 방지)
@@ -462,6 +462,104 @@ class MainWindow(QMainWindow):
         self.df = None
         self.file_path = None
 
+        # ============================================================
+        # 커스텀 타이틀바 설정 (Frameless Window)
+        # ============================================================
+        self.setWindowFlags(Qt.FramelessWindowHint)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        
+        # 기존 centralWidget 가져오기
+        old_central = self.centralWidget()
+        
+        # 새로운 메인 위젯 생성 (타이틀바 + 기존 내용)
+        main_container = QWidget()
+        main_container.setObjectName("MainContainer")
+        main_container.setStyleSheet("""
+            #MainContainer {
+                background-color: #1E1E1E;
+                border: 1px solid #333333;
+            }
+        """)
+        main_layout = QVBoxLayout(main_container)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+        
+        # 1. 타이틀바 생성
+        self.title_bar = QWidget()
+        self.title_bar.setObjectName("TitleBar")
+        self.title_bar.setFixedHeight(35)
+        self.title_bar.setStyleSheet("""
+            #TitleBar {
+                background-color: #1E1E1E;
+                border-bottom: 1px solid #333333;
+            }
+            QLabel {
+                color: #CCCCCC;
+                font-family: 'Segoe UI';
+                font-size: 12px;
+            }
+            QPushButton {
+                background-color: transparent;
+                border: none;
+                color: #AAAAAA;
+            }
+            QPushButton:hover {
+                background-color: #333333;
+                color: white;
+            }
+        """)
+        
+        title_layout = QHBoxLayout(self.title_bar)
+        title_layout.setContentsMargins(10, 0, 0, 0)
+        title_layout.setSpacing(10)
+        
+        # 아이콘
+        icon_label = QLabel()
+        icon_label.setPixmap(QIcon(icon_path).pixmap(20, 20))
+        title_layout.addWidget(icon_label)
+        
+        # 제목
+        title_label = QLabel("Data Modification Tool")
+        title_layout.addWidget(title_label)
+        
+        title_layout.addStretch()
+        
+        # 윈도우 컨트롤 버튼 (최소화, 최대화, 닫기)
+        btn_minimize = QPushButton("─")
+        btn_minimize.setFixedSize(45, 35)
+        btn_minimize.clicked.connect(self.showMinimized)
+        
+        self.btn_maximize = QPushButton("☐")
+        self.btn_maximize.setFixedSize(45, 35)
+        self.btn_maximize.clicked.connect(self.toggle_maximize)
+        
+        btn_close = QPushButton("✕")
+        btn_close.setFixedSize(45, 35)
+        btn_close.setStyleSheet("""
+            QPushButton:hover {
+                background-color: #C42B1C;
+                color: white;
+            }
+        """)
+        btn_close.clicked.connect(self.close)
+        
+        title_layout.addWidget(btn_minimize)
+        title_layout.addWidget(self.btn_maximize)
+        title_layout.addWidget(btn_close)
+        
+        # 2. 레이아웃에 추가
+        main_layout.addWidget(self.title_bar)
+        main_layout.addWidget(old_central)
+        
+        # 새로운 컨테이너를 CentralWidget으로 설정
+        self.setCentralWidget(main_container)
+        
+        # 드래그 및 리사이즈 관련 변수
+        self.old_pos = None
+        self.is_maximized = False
+        self.resize_margin = 5
+        self.resize_mode = None # None, 'top', 'bottom', 'left', 'right', 'top-left', ...
+
         # 추가 초기화
         self.setup_graph()
         self.setup_custom_unit_visibility()
@@ -471,6 +569,37 @@ class MainWindow(QMainWindow):
         # 상태 표시줄 설정
         self.statusbar.showMessage("Ready. Please load a data file.")
         self.lblFileInfo.setText("No file loaded")
+
+    def toggle_maximize(self):
+        """최대화/복원 토글"""
+        if self.isMaximized():
+            self.showNormal()
+            self.btn_maximize.setText("☐")
+            self.is_maximized = False
+        else:
+            self.showMaximized()
+            self.btn_maximize.setText("❐")
+            self.is_maximized = True
+
+    # ============================================================
+    # 윈도우 드래그 및 리사이즈 이벤트 처리
+    # ============================================================
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            # 타이틀바 클릭 시 드래그 시작
+            if self.title_bar.geometry().contains(self.mapFromGlobal(event.globalPos())):
+                self.old_pos = event.globalPos()
+            else:
+                self.old_pos = None
+
+    def mouseMoveEvent(self, event):
+        if self.old_pos:
+            delta = event.globalPos() - self.old_pos
+            self.move(self.pos() + delta)
+            self.old_pos = event.globalPos()
+
+    def mouseReleaseEvent(self, event):
+        self.old_pos = None
 
     def setup_graph(self):
         """Matplotlib 그래프 설정"""
