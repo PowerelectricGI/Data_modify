@@ -1055,41 +1055,36 @@ class MainWindow(QMainWindow):
                 QMessageBox.warning(self, "Warning", "Please select at least one column.")
                 return
 
-            # 3. 데이터 서브셋 추출
-            # 원본 데이터 전체 복사 (그래프 표시용)
-            # 여기서는 첫 번째 선택된 컬럼만 그래프에 표시한다고 가정 (복잡도 감소)
-            target_col = selected_cols[0]
-            subset = self.df[target_col].iloc[start_row:end_row]
-            
-            # 4. 수정 로직 적용
-            modified_subset = self.apply_modification(pd.DataFrame(subset), method, value, ratio)
-            
-            # 5. 그래프 업데이트 (빨간색 점선)
-            # X축 계산: 원본 인덱스 위치에 맞춰서 표시
-            # Upsampling/Downsampling의 경우 X축 간격이 달라짐
-            
-            # 원본 X축 범위
-            x_start = start_row
-            x_end = end_row
-            
-            # 수정된 데이터의 X축 생성
-            modified_len = len(modified_subset)
-            modified_x = np.linspace(x_start, x_end, modified_len)
-            
-            # 기존 미리보기 라인 제거
-            for line in self.ax.lines:
-                if line.get_label() == 'Preview':
-                    line.remove()
-            
-            self.ax.plot(modified_x, modified_subset.iloc[:, 0], 'r--', label='Preview', linewidth=1.5)
-            
+            # 3. 기존 미리보기 라인 제거
+            lines_to_remove = [line for line in self.ax.lines if line.get_label() == 'Preview']
+            for line in lines_to_remove:
+                line.remove()
+
+            # 4. 각 컬럼별 수정 로직 적용 및 그래프 표시
+            for i, col in enumerate(selected_cols):
+                # 데이터 서브셋 추출 (DataFrame 형태 유지)
+                subset = self.df[[col]].iloc[start_row:end_row]
+                
+                # 수정 로직 적용
+                modified_subset = self.apply_modification(subset, method, value, ratio)
+                
+                # X축 계산
+                x_start = start_row
+                x_end = end_row
+                modified_len = len(modified_subset)
+                modified_x = np.linspace(x_start, x_end, modified_len)
+                
+                # 그래프 플롯 (빨간색 점선)
+                # 범례 중복 방지를 위해 첫 번째만 라벨 설정하거나, 나중에 deduplication 처리
+                self.ax.plot(modified_x, modified_subset[col], 'r--', label='Preview', linewidth=1.5)
+
             # 범례 업데이트
             handles, labels = self.ax.get_legend_handles_labels()
             by_label = dict(zip(labels, handles))
             self.ax.legend(by_label.values(), by_label.keys(), loc='upper left', facecolor='#2D2D30', edgecolor='#555555', labelcolor='white')
             
             self.canvas.draw()
-            self.add_log(f"Preview: {method} on {target_col} ({start_row}~{end_row})")
+            self.add_log(f"Preview: {method} on {len(selected_cols)} columns ({start_row}~{end_row})")
             
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Preview failed: {str(e)}")
