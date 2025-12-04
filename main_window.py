@@ -15,7 +15,7 @@ from PyQt5.QtWidgets import (
     QVBoxLayout, QDialog, QTableWidget, QTableWidgetItem,
     QHeaderView, QDialogButtonBox, QLabel, QTextEdit,
     QGroupBox, QListWidget, QSizePolicy, QProgressBar,
-    QWidget, QHBoxLayout, QPushButton, QTabWidget
+    QWidget, QHBoxLayout, QPushButton, QTabWidget, QApplication
 )
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QObject
 from PyQt5.QtGui import QColor, QIcon, QFont
@@ -740,6 +740,32 @@ class MainWindow(QMainWindow):
             }
         """)
         msg.exec_()
+
+    def create_loading_dialog(self, message):
+        """저장 중 로딩 다이얼로그 생성"""
+        dialog = QDialog(self)
+        dialog.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
+        dialog.setStyleSheet("""
+            QDialog {
+                background-color: #1E1E1E;
+                border: 1px solid #3C3C3C;
+                border-radius: 8px;
+            }
+            QLabel {
+                color: #E0E0E0;
+                font-size: 14px;
+                font-weight: bold;
+            }
+        """)
+        
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(20, 20, 20, 20)
+        
+        label = QLabel(message)
+        label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(label)
+        
+        return dialog
 
     def update_statistics(self):
         """현재 데이터의 통계 업데이트"""
@@ -1567,19 +1593,43 @@ class MainWindow(QMainWindow):
         """데이터 저장"""
         if self.df is None: return
         
+        # 선택된 포맷 가져오기
+        selected_format = self.comboFormat.currentText()
+        
+        # 필터 문자열 구성 (선택된 포맷을 가장 앞에 배치)
+        filters = {
+            ".csv": "CSV Files (*.csv)",
+            ".xlsx": "Excel Files (*.xlsx)",
+            ".txt": "Text Files (*.txt)"
+        }
+        
+        default_filter = filters.get(selected_format, "CSV Files (*.csv)")
+        remaining_filters = [f for k, f in filters.items() if k != selected_format]
+        filter_str = f"{default_filter};;" + ";;".join(remaining_filters)
+        
         file_path, _ = QFileDialog.getSaveFileName(
-            self, "Save Data", "", "CSV Files (*.csv);;Excel Files (*.xlsx)"
+            self, "Save Data", "", filter_str
         )
         
         if file_path:
+            # 로딩 다이얼로그 표시
+            loading_dialog = self.create_loading_dialog("Saving data... Please wait.")
+            loading_dialog.show()
+            QApplication.processEvents()
+            
             try:
                 if file_path.endswith('.csv'):
                     self.df.to_csv(file_path, index=False, encoding='utf-8-sig')
                 elif file_path.endswith('.xlsx'):
                     self.df.to_excel(file_path, index=False)
+                elif file_path.endswith('.txt'):
+                    self.df.to_csv(file_path, index=False, sep='\t', encoding='utf-8-sig') # 탭 구분자로 저장
+                
+                loading_dialog.close()
                 self.add_log(f"Saved to {file_path}")
                 self.show_custom_message_box("Success", "File saved successfully.", QMessageBox.Information)
             except Exception as e:
+                loading_dialog.close()
                 self.show_custom_message_box("Error", f"Save failed: {str(e)}", QMessageBox.Critical)
 
     def export_graph(self):
