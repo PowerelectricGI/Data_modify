@@ -1375,6 +1375,22 @@ class MainWindow(QMainWindow):
                         else:
                             self.tablePreview.setItem(row, i + 1, QTableWidgetItem(""))
                             
+                # ==========================================
+                # Statistics Summary 업데이트 (Preview)
+                # ==========================================
+                # Original Subset
+                original_subset = self.df.iloc[start_row:end_row][selected_cols]
+                
+                # Modified Subset (Construct from dict)
+                # 모든 컬럼의 길이가 같다고 가정 (같은 Method/Ratio 적용)
+                modified_subset_df = pd.DataFrame(modified_data_dict)
+                
+                self.update_summary_table(original_subset, modified_subset_df)
+                
+                # GroupBox Title 업데이트
+                if hasattr(self, 'groupStatistics'):
+                    self.groupStatistics.setTitle(f"Statistics Summary - {method} (Preview)")
+                            
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Preview failed: {str(e)}")
 
