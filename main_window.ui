@@ -30,7 +30,7 @@ QMainWindow {
 QWidget {
     color: #E0E0E0;
     font-family: 'Segoe UI', 'Noto Sans KR', sans-serif;
-    font-size: 12px;
+    font-size: 11px;
 }
 
 /* ============================================================
@@ -77,8 +77,8 @@ QGroupBox#sectionGroup {
     background-color: transparent;
     border: 1px dashed #555555;
     border-radius: 0px;
-    margin-top: 8px;
-    padding: 10px;
+    margin-top: 4px;
+    padding: 4px;
     padding-top: 5px;
     font-weight: normal;
 }
@@ -91,7 +91,7 @@ QGroupBox#sectionGroup::title {
     padding: 0px 3px;
     background-color: #1E1E1E;
     color: #888888;
-    font-size: 11px;
+    font-size: 10px;
     font-weight: normal;
 }
 
@@ -100,8 +100,8 @@ QGroupBox#innerGroup {
     background-color: transparent;
     border: 1px dashed #555555;
     border-radius: 0px;
-    margin-top: 8px;
-    padding: 8px;
+    margin-top: 4px;
+    padding: 4px;
     padding-top: 5px;
 }
 
@@ -113,7 +113,7 @@ QGroupBox#innerGroup::title {
     padding: 0px 3px;
     background-color: #1E1E1E;
     color: #888888;
-    font-size: 11px;
+    font-size: 10px;
     font-weight: normal;
 }
 
@@ -407,7 +407,7 @@ QFrame {
      <widget class="QWidget" name="leftPanel">
       <property name="maximumSize">
        <size>
-        <width>400</width>
+        <width>550</width>
         <height>16777215</height>
        </size>
       </property>
@@ -812,7 +812,7 @@ QFrame {
        <item>
         <widget class="QGroupBox" name="groupDataRange">
          <property name="title">
-          <string>3. Data Range Selection</string>
+          <string>4. Data Range Selection</string>
          </property>
          <property name="objectName">
           <string>sectionGroup</string>
@@ -973,7 +973,7 @@ QFrame {
        <item>
         <widget class="QGroupBox" name="groupModification">
          <property name="title">
-          <string>4. Modification Method</string>
+          <string>5. Modification Method</string>
          </property>
          <property name="objectName">
           <string>sectionGroup</string>
@@ -1214,7 +1214,7 @@ QFrame {
     <item>
      <widget class="QGroupBox" name="groupResults">
       <property name="title">
-       <string>6. Preview Results</string>
+       <string>7. Preview Results</string>
       </property>
       <property name="objectName">
        <string>sectionGroup</string>
@@ -1608,7 +1608,7 @@ QFrame {
          <item>
           <widget class="QGroupBox" name="groupSave">
            <property name="title">
-            <string>7. Save</string>
+            <string>8. Save</string>
            </property>
            <property name="objectName">
             <string>innerGroup</string>

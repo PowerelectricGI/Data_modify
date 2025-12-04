@@ -15,7 +15,8 @@ from PyQt5.QtWidgets import (
     QVBoxLayout, QDialog, QTableWidget, QTableWidgetItem,
     QHeaderView, QDialogButtonBox, QLabel, QTextEdit,
     QGroupBox, QListWidget, QSizePolicy, QProgressBar,
-    QWidget, QHBoxLayout, QPushButton, QTabWidget, QApplication, QSplashScreen
+    QWidget, QHBoxLayout, QPushButton, QTabWidget, QApplication, QSplashScreen,
+    QComboBox, QLineEdit, QScrollArea
 )
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QObject
 from PyQt5.QtGui import QColor, QIcon, QFont, QPixmap
@@ -394,6 +395,7 @@ class MainWindow(QMainWindow):
         # 추가 초기화
         self.setup_graph()
         self.setup_custom_unit_visibility()
+        self.setup_time_ui() # 시간 컬럼 설정 UI 추가
         self.setup_stats_and_log_ui()  # 통계 및 로그 UI 추가
         self.setup_preview_ui() # 프리뷰 UI 추가
         self.connect_signals()
@@ -590,17 +592,18 @@ class MainWindow(QMainWindow):
         # 변환 계수 업데이트
         self.update_conversion_factor()
 
-    def setup_stats_and_log_ui(self):
-        """통계 및 로그 섹션 UI 추가 (Code-behind)"""
-        # 1. GroupBox 생성 - 하얀색 실선 테두리 스타일
-        self.groupStatsLog = QGroupBox("5. Statistics & Log")
-        self.groupStatsLog.setStyleSheet("""
+    def setup_time_ui(self):
+        """시간 컬럼 설정 UI 추가 (Code-behind)"""
+        # 1. GroupBox 생성
+        self.groupTimeConfig = QGroupBox("3. Time Column Settings")
+        self.groupTimeConfig.setObjectName("sectionGroup")
+        self.groupTimeConfig.setStyleSheet("""
             QGroupBox {
                 background-color: transparent;
                 border: 1px solid white;
                 border-radius: 0px;
-                margin-top: 8px;
-                padding: 10px;
+                margin-top: 4px;
+                padding: 4px;
                 padding-top: 5px;
                 font-weight: normal;
             }
@@ -612,7 +615,130 @@ class MainWindow(QMainWindow):
                 padding: 0px 3px;
                 background-color: #1E1E1E;
                 color: white;
-                font-size: 11px;
+                font-weight: normal;
+                font-size: 10px;
+            }
+        """)
+        
+        layout = QVBoxLayout(self.groupTimeConfig)
+        layout.setSpacing(2)
+        layout.setContentsMargins(4, 8, 4, 4)
+        
+        # 2. 시간 컬럼 존재 여부 체크박스
+        self.chkTimeExists = QCheckBox("Time Column Exists")
+        self.chkTimeExists.setChecked(False)
+        self.chkTimeExists.stateChanged.connect(self.toggle_time_ui)
+        layout.addWidget(self.chkTimeExists)
+        
+        # 3. 시간 컬럼 선택 콤보박스
+        time_col_layout = QHBoxLayout()
+        time_col_layout.setSpacing(4)
+        time_col_layout.setContentsMargins(0, 0, 0, 0)
+        time_col_layout.addWidget(QLabel("Column:"))
+        self.comboTimeCol = QComboBox()
+        self.comboTimeCol.setEnabled(False)
+        time_col_layout.addWidget(self.comboTimeCol)
+        layout.addLayout(time_col_layout)
+        
+        # 4. 날짜 포맷 입력
+        format_layout = QHBoxLayout()
+        format_layout.setSpacing(4)
+        format_layout.setContentsMargins(0, 0, 0, 0)
+        format_layout.addWidget(QLabel("Format:"))
+        
+        self.editDateFormat = QComboBox()
+        self.editDateFormat.setEditable(True)
+        
+        # 날짜 포맷 매핑 (Display -> Python Format)
+        self.dateFormatMap = {
+            "yyyy-mm-dd HH:MM:SS": "%Y-%m-%d %H:%M:%S",
+            "yyyy-mm-dd HH:MM": "%Y-%m-%d %H:%M",
+            "yyyy-mm-dd": "%Y-%m-%d",
+            "mm/dd/yyyy": "%m/%d/%Y",
+            "dd/mm/yyyy": "%d/%m/%Y",
+            "yyyy.mm.dd": "%Y.%m.%d",
+            "HH:MM:SS": "%H:%M:%S"
+        }
+        self.editDateFormat.addItems(self.dateFormatMap.keys())
+        self.editDateFormat.setEnabled(False)
+        
+        format_layout.addWidget(self.editDateFormat)
+        layout.addLayout(format_layout)
+        
+        # 5. 추출할 컴포넌트 선택 (체크박스)
+        components_label = QLabel("Extract Components:")
+        layout.addWidget(components_label)
+        
+        comp_layout_1 = QHBoxLayout()
+        comp_layout_1.setSpacing(4)
+        comp_layout_1.setContentsMargins(0, 0, 0, 0)
+        self.chkYear = QCheckBox("Year")
+        self.chkMonth = QCheckBox("Month")
+        self.chkDay = QCheckBox("Day")
+        comp_layout_1.addWidget(self.chkYear)
+        comp_layout_1.addWidget(self.chkMonth)
+        comp_layout_1.addWidget(self.chkDay)
+        layout.addLayout(comp_layout_1)
+        
+        comp_layout_2 = QHBoxLayout()
+        comp_layout_2.setSpacing(4)
+        comp_layout_2.setContentsMargins(0, 0, 0, 0)
+        self.chkHour = QCheckBox("Hour")
+        self.chkMinute = QCheckBox("Minute")
+        self.chkSecond = QCheckBox("Second")
+        comp_layout_2.addWidget(self.chkHour)
+        comp_layout_2.addWidget(self.chkMinute)
+        comp_layout_2.addWidget(self.chkSecond)
+        layout.addLayout(comp_layout_2)
+        
+        # 초기 상태 설정
+        for chk in [self.chkYear, self.chkMonth, self.chkDay, self.chkHour, self.chkMinute, self.chkSecond]:
+            chk.setEnabled(False)
+            
+        # UI에 추가 (Unit Config 다음에 추가)
+        # leftPanelLayout의 인덱스를 찾아서 삽입해야 함 (Unit Config가 1번 인덱스라고 가정)
+        # 안전하게 groupUnitConfig 다음에 추가하기 위해 layout을 순회하거나 끝에 추가 후 이동
+        
+        # 현재 leftPanelLayout 구조:
+        # 0: groupDataLoad
+        # 1: groupUnitConfig
+        # 2: groupDataRange
+        # 3: groupModificationMethod
+        
+        # 2번 인덱스(groupDataRange 앞)에 삽입
+        self.leftPanelLayout.insertWidget(2, self.groupTimeConfig)
+
+    def toggle_time_ui(self, state):
+        """시간 설정 UI 활성화/비활성화 토글"""
+        enabled = (state == Qt.Checked)
+        self.comboTimeCol.setEnabled(enabled)
+        self.editDateFormat.setEnabled(enabled)
+        for chk in [self.chkYear, self.chkMonth, self.chkDay, self.chkHour, self.chkMinute, self.chkSecond]:
+            chk.setEnabled(enabled)
+
+    def setup_stats_and_log_ui(self):
+        """통계 및 로그 섹션 UI 추가 (Code-behind)"""
+        # 1. GroupBox 생성 - 하얀색 실선 테두리 스타일
+        self.groupStatsLog = QGroupBox("6. Statistics & Log")
+        self.groupStatsLog.setStyleSheet("""
+            QGroupBox {
+                background-color: transparent;
+                border: 1px solid white;
+                border-radius: 0px;
+                margin-top: 4px;
+                padding: 4px;
+                padding-top: 5px;
+                font-weight: normal;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                subcontrol-position: top left;
+                left: 5px;
+                top: 0px;
+                padding: 0px 3px;
+                background-color: #1E1E1E;
+                color: white;
+                font-size: 10px;
                 font-weight: normal;
             }
         """)
@@ -621,7 +747,8 @@ class MainWindow(QMainWindow):
         self.groupStatsLog.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         
         layout = QVBoxLayout(self.groupStatsLog)
-        layout.setSpacing(10)
+        layout.setSpacing(4)
+        layout.setContentsMargins(4, 8, 4, 4)
         
         # 2. 통계 테이블 (Min, Max, Avg, Std)
         stats_label = QLabel("📊 Quick Statistics")
@@ -631,7 +758,9 @@ class MainWindow(QMainWindow):
         self.tableQuickStats = QTableWidget(0, 5)
         self.tableQuickStats.setHorizontalHeaderLabels(["Column", "Min", "Max", "Avg", "Std"])
         self.tableQuickStats.verticalHeader().setVisible(False)
-        self.tableQuickStats.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        header = self.tableQuickStats.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.Stretch)
+        header.setSectionResizeMode(0, QHeaderView.ResizeToContents) # Column Name은 내용에 맞게
         self.tableQuickStats.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.tableQuickStats.setStyleSheet("""
             QTableWidget {
@@ -709,6 +838,7 @@ class MainWindow(QMainWindow):
 
     def add_log(self, message):
         """로그 리스트에 메시지 추가"""
+        print(f"[LOG] {message}") # Console output for debugging
         self.listLog.addItem(message)
         self.listLog.scrollToBottom()
         self.statusbar.showMessage(message)
@@ -930,24 +1060,60 @@ class MainWindow(QMainWindow):
             self.editRowEnd.setText(str(rows))
             
             # Column Checkbox 동적 생성
-            # 기존 체크박스 제거
-            while self.columnSelectLayout.count() > 1: # 첫 번째 아이템(Label) 제외하고 제거
+            # Column Checkbox 동적 생성
+            # 기존 체크박스 제거 (Label 제외하고 모두 제거)
+            while self.columnSelectLayout.count() > 1: 
                 item = self.columnSelectLayout.takeAt(1)
                 if item.widget():
                     item.widget().deleteLater()
             
-            # 새 체크박스 추가
+            # ScrollArea 생성 (체크박스들을 담을 컨테이너)
+            scroll = QScrollArea()
+            scroll.setWidgetResizable(True)
+            scroll.setStyleSheet("""
+                QScrollArea { border: none; background-color: transparent; }
+                QWidget { background-color: transparent; }
+                QScrollBar:vertical { width: 10px; }
+            """)
+            
+            scroll_content = QWidget()
+            scroll_layout = QVBoxLayout(scroll_content)
+            scroll_layout.setContentsMargins(0, 0, 0, 0)
+            scroll_layout.setSpacing(4)
+            
             self.column_checkboxes = []
             for col in self.df.columns:
                 chk = QCheckBox(col)
                 chk.setChecked(True) # 기본적으로 모두 선택
                 chk.setStyleSheet("color: #E0E0E0;")
                 chk.stateChanged.connect(self.update_graph_from_selection) # 이벤트 연결
-                self.columnSelectLayout.addWidget(chk)
+                scroll_layout.addWidget(chk)
                 self.column_checkboxes.append(chk)
+            
+            scroll_layout.addStretch() # 위로 정렬
+            scroll.setWidget(scroll_content)
+            
+            # Layout에 ScrollArea 추가
+            self.columnSelectLayout.addWidget(scroll)
             
             # 통계 업데이트
             self.update_statistics()
+            
+            # 시간 컬럼 콤보박스 업데이트
+            self.comboTimeCol.clear()
+            self.comboTimeCol.addItems(self.df.columns)
+            
+            # 시간 컬럼 자동 감지 (time, date 포함된 컬럼)
+            time_col_found = False
+            for i, col in enumerate(self.df.columns):
+                if 'time' in col.lower() or 'date' in col.lower():
+                    self.comboTimeCol.setCurrentIndex(i)
+                    self.chkTimeExists.setChecked(True)
+                    time_col_found = True
+                    break
+            
+            if not time_col_found:
+                self.chkTimeExists.setChecked(False)
             
             # 그래프 초기화
             self.update_graph_from_selection()
@@ -1589,6 +1755,88 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Execution failed: {str(e)}")
 
+    def process_time_column(self):
+        """시간 컬럼 처리 및 추출"""
+        if self.df is None: return None
+        
+        # 복사본 생성
+        df_to_save = self.df.copy()
+        
+        # 시간 컬럼 설정이 활성화되어 있고 체크되어 있는지 확인
+        if self.chkTimeExists.isChecked():
+            try:
+                time_col = self.comboTimeCol.currentText()
+                
+                # 포맷 매핑 확인 (사용자 입력이 매핑에 있으면 변환, 없으면 그대로 사용)
+                raw_format = self.editDateFormat.currentText()
+                
+                # 1. 매핑 테이블 확인
+                if raw_format in self.dateFormatMap:
+                    date_format = self.dateFormatMap[raw_format]
+                else:
+                    # 2. 매핑에 없으면 동적 변환 시도 (Excel Style -> Python Style)
+                    # yyyy -> %Y, mm -> %m, dd -> %d, HH -> %H, MM -> %M, SS -> %S
+                    # 주의: mm(월)과 MM(분) 구분 필요. 
+                    # 사용자가 입력한 문자열을 순차적으로 변환
+                    converted = raw_format
+                    converted = converted.replace("yyyy", "%Y")
+                    converted = converted.replace("yy", "%y")
+                    converted = converted.replace("mm", "%m")
+                    converted = converted.replace("dd", "%d")
+                    converted = converted.replace("HH", "%H")
+                    converted = converted.replace("MM", "%M")
+                    converted = converted.replace("SS", "%S")
+                    date_format = converted
+                    
+                    self.add_log(f"Custom format conversion: '{raw_format}' -> '{date_format}'")
+                
+                # 날짜 변환
+                if time_col in df_to_save.columns:
+                    # Debug Logging
+                    sample_data = df_to_save[time_col].head(5).tolist()
+                    self.add_log(f"Debug: Time Column '{time_col}' Sample: {sample_data}")
+                    self.add_log(f"Debug: Using Format: '{date_format}'")
+                    
+                    # pd.to_datetime은 포맷이 안 맞으면 에러 발생 가능
+                    # errors='coerce'로 하면 변환 실패 시 NaT 반환
+                    series_datetime = pd.to_datetime(df_to_save[time_col], format=date_format, errors='coerce')
+                    
+                    # Fallback: If all NaT, try auto-detection
+                    if series_datetime.isna().all():
+                        self.add_log(f"Warning: Strict format '{date_format}' failed. Attempting auto-detection...")
+                        series_datetime = pd.to_datetime(df_to_save[time_col], errors='coerce')
+                    
+                    # Debug Result
+                    sample_result = series_datetime.head(5).tolist()
+                    self.add_log(f"Debug: Converted Sample: {sample_result}")
+                    
+                    # 추출할 컴포넌트
+                    components = []
+                    if self.chkYear.isChecked(): components.append(('Year', series_datetime.dt.year))
+                    if self.chkMonth.isChecked(): components.append(('Month', series_datetime.dt.month))
+                    if self.chkDay.isChecked(): components.append(('Day', series_datetime.dt.day))
+                    if self.chkHour.isChecked(): components.append(('Hour', series_datetime.dt.hour))
+                    if self.chkMinute.isChecked(): components.append(('Minute', series_datetime.dt.minute))
+                    if self.chkSecond.isChecked(): components.append(('Second', series_datetime.dt.second))
+                    
+                    # 새 컬럼들을 DataFrame 앞에 추가
+                    # insert 메서드를 사용하여 0번 인덱스부터 차례로 추가 (역순으로 추가해야 순서 유지됨? 아니면 리스트 만들어서 concat)
+                    # concat이 깔끔함
+                    
+                    new_cols_df = pd.DataFrame()
+                    for name, series in components:
+                        new_cols_df[name] = series
+                        
+                    # 기존 데이터와 합치기 (새 컬럼들을 앞으로)
+                    df_to_save = pd.concat([new_cols_df, df_to_save], axis=1)
+                    
+            except Exception as e:
+                # 변환 실패 시 경고 로그 남기고 원본 저장
+                self.add_log(f"Warning: Failed to process time column. {str(e)}")
+                # 사용자에게 알림 (선택 사항)
+                
+        return df_to_save
+
     def save_data(self):
         """데이터 저장"""
         if self.df is None: return
@@ -1618,12 +1866,16 @@ class MainWindow(QMainWindow):
             QApplication.processEvents()
             
             try:
+                # 시간 컬럼 처리된 데이터프레임 가져오기
+                df_final = self.process_time_column()
+                if df_final is None: df_final = self.df
+                
                 if file_path.endswith('.csv'):
-                    self.df.to_csv(file_path, index=False, encoding='utf-8-sig')
+                    df_final.to_csv(file_path, index=False, encoding='utf-8-sig')
                 elif file_path.endswith('.xlsx'):
-                    self.df.to_excel(file_path, index=False)
+                    df_final.to_excel(file_path, index=False)
                 elif file_path.endswith('.txt'):
-                    self.df.to_csv(file_path, index=False, sep='\t', encoding='utf-8-sig') # 탭 구분자로 저장
+                    df_final.to_csv(file_path, index=False, sep='\t', encoding='utf-8-sig') # 탭 구분자로 저장
                 
                 loading_dialog.close()
                 self.add_log(f"Saved to {file_path}")
