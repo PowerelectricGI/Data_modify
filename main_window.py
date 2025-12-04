@@ -628,12 +628,10 @@ class MainWindow(QMainWindow):
         stats_label.setStyleSheet("color: white; font-weight: normal; margin-bottom: 3px; font-size: 11px;")
         layout.addWidget(stats_label)
         
-        self.tableStats = QTableWidget(1, 4)
-        self.tableStats.setHorizontalHeaderLabels(["Min", "Max", "Avg", "Std"])
-        self.tableStats.setVerticalHeaderLabels(["Value"])
-        self.tableStats.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.tableStats = QTableWidget(0, 5)
+        self.tableStats.setHorizontalHeaderLabels(["Column", "Min", "Max", "Avg", "Std"])
         self.tableStats.verticalHeader().setVisible(False)
-        # self.tableStats.setFixedHeight(60) # 고정 높이 제거
+        self.tableStats.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.tableStats.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.tableStats.setStyleSheet("""
             QTableWidget {
@@ -650,9 +648,6 @@ class MainWindow(QMainWindow):
                 font-size: 11px;
             }
         """)
-        # 초기값 설정
-        for col in range(4):
-            self.tableStats.setItem(0, col, QTableWidgetItem("-"))
             
         layout.addWidget(self.tableStats, 1) # Stretch 1
         
@@ -723,20 +718,32 @@ class MainWindow(QMainWindow):
         if self.df is None:
             return
             
-        # 첫 번째 숫자형 컬럼 찾기 (Time 제외)
-        target_col = None
-        for col in self.df.columns:
-            if col.lower() != 'time' and pd.api.types.is_numeric_dtype(self.df[col]):
-                target_col = col
-                break
+        # 기존 테이블 초기화
+        self.tableStats.setRowCount(0)
         
-        if target_col:
-            stats = self.df[target_col].describe()
-            self.tableStats.setItem(0, 0, QTableWidgetItem(f"{stats['min']:.4g}"))
-            self.tableStats.setItem(0, 1, QTableWidgetItem(f"{stats['max']:.4g}"))
-            self.tableStats.setItem(0, 2, QTableWidgetItem(f"{stats['mean']:.4g}"))
-            self.tableStats.setItem(0, 3, QTableWidgetItem(f"{stats['std']:.4g}"))
-            self.add_log(f"Stats updated for column: {target_col}")
+        numeric_cols = []
+        for col in self.df.columns:
+            # Time 컬럼 제외하고 숫자형 컬럼 찾기
+            if col.lower() != 'time' and pd.api.types.is_numeric_dtype(self.df[col]):
+                numeric_cols.append(col)
+        
+        if not numeric_cols:
+            return
+
+        self.tableStats.setRowCount(len(numeric_cols))
+        
+        for i, col in enumerate(numeric_cols):
+            stats = self.df[col].describe()
+            
+            # Column Name
+            self.tableStats.setItem(i, 0, QTableWidgetItem(str(col)))
+            # Stats
+            self.tableStats.setItem(i, 1, QTableWidgetItem(f"{stats['min']:.4g}"))
+            self.tableStats.setItem(i, 2, QTableWidgetItem(f"{stats['max']:.4g}"))
+            self.tableStats.setItem(i, 3, QTableWidgetItem(f"{stats['mean']:.4g}"))
+            self.tableStats.setItem(i, 4, QTableWidgetItem(f"{stats['std']:.4g}"))
+            
+        self.add_log(f"Stats updated for {len(numeric_cols)} columns")
 
     # ============ 이벤트 핸들러 메서드 ============
 
@@ -1238,12 +1245,17 @@ class MainWindow(QMainWindow):
                     line.remove()
 
             # 3. 각 선택된 컬럼에 대해 루프 실행
+            modified_data_dict = {} # Preview Table용 데이터 저장
+            
             for target_col in selected_cols:
                 # 데이터 서브셋 추출
                 subset = self.df[target_col].iloc[start_row:end_row]
                 
                 # 4. 수정 로직 적용
                 modified_subset = self.apply_modification(pd.DataFrame(subset), method, value, ratio)
+                
+                # 결과 저장 (Series로 변환)
+                modified_data_dict[target_col] = modified_subset.iloc[:, 0].values
                 
                 # 5. 그래프 업데이트 (빨간색 점선)
                 # X축 계산: 원본 인덱스 위치에 맞춰서 표시
@@ -1270,6 +1282,32 @@ class MainWindow(QMainWindow):
             
             self.add_log(f"Preview: {method} on {len(selected_cols)} columns ({start_row}~{end_row})")
             
+            # ==========================================
+            # Preview Table 업데이트
+            # ==========================================
+            if modified_data_dict:
+                # 최대 길이 계산
+                max_len = max(len(v) for v in modified_data_dict.values())
+                display_rows = min(max_len, 1000) # 최대 1000행까지만 표시
+                
+                # 테이블 설정
+                self.tablePreview.setColumnCount(1 + len(selected_cols))
+                self.tablePreview.setRowCount(display_rows)
+                self.tablePreview.setHorizontalHeaderLabels(["Index"] + selected_cols)
+                
+                # 데이터 채우기
+                for row in range(display_rows):
+                    # Index
+                    self.tablePreview.setItem(row, 0, QTableWidgetItem(str(row)))
+                    
+                    # Values
+                    for i, col in enumerate(selected_cols):
+                        vals = modified_data_dict[col]
+                        if row < len(vals):
+                            self.tablePreview.setItem(row, i + 1, QTableWidgetItem(f"{vals[row]:.4f}"))
+                        else:
+                            self.tablePreview.setItem(row, i + 1, QTableWidgetItem(""))
+                            
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Preview failed: {str(e)}")
 
@@ -1318,12 +1356,16 @@ class MainWindow(QMainWindow):
             
             modified_subset = self.apply_modification(subset, method, value, ratio)
             
+            # Preview Table용 데이터 수집
+            preview_data = {}
+            
             # 4. 데이터프레임 병합
             # 길이가 같은 경우 (Basic Ops)
             if len(modified_subset) == len(subset):
                 # 선택된 컬럼만 업데이트
                 for col in selected_cols:
                     self.df.loc[start_row:end_row-1, col] = modified_subset[col].values
+                    preview_data[col] = modified_subset[col].values
             else:
                 # 길이가 다른 경우 (Resampling) -> DataFrame 재구성 필요
                 # Part 1: Start 이전
@@ -1348,6 +1390,7 @@ class MainWindow(QMainWindow):
                     # 선택된 컬럼은 지정된 메서드로, 아니면 기본(Linear/Average)로 처리하여 길이 맞춤
                     if col in selected_cols:
                         mod_data = self.apply_modification(col_data, method, value, ratio)
+                        preview_data[col] = mod_data.iloc[:, 0].values # Preview용 저장
                     else:
                         # 선택 안 된 컬럼도 길이를 맞춰야 함 (동기화)
                         sync_method = "Linear" if ratio > 1 else "Average"
@@ -1371,6 +1414,33 @@ class MainWindow(QMainWindow):
             
             # Row End 업데이트 (길이가 변했을 수 있음)
             self.editRowEnd.setText(str(len(self.df)))
+            
+            # ==========================================
+            # Preview Table 업데이트 (실행 결과 표시)
+            # ==========================================
+            if preview_data:
+                # 최대 길이 계산
+                max_len = max(len(v) for v in preview_data.values())
+                display_rows = min(max_len, 1000) # 최대 1000행까지만 표시
+                
+                # 테이블 설정
+                self.tablePreview.setColumnCount(1 + len(selected_cols))
+                self.tablePreview.setRowCount(display_rows)
+                self.tablePreview.setHorizontalHeaderLabels(["Index"] + selected_cols)
+                
+                # 데이터 채우기
+                for row in range(display_rows):
+                    # Index
+                    self.tablePreview.setItem(row, 0, QTableWidgetItem(str(row)))
+                    
+                    # Values
+                    for i, col in enumerate(selected_cols):
+                        if col in preview_data:
+                            vals = preview_data[col]
+                            if row < len(vals):
+                                self.tablePreview.setItem(row, i + 1, QTableWidgetItem(f"{vals[row]:.4f}"))
+                            else:
+                                self.tablePreview.setItem(row, i + 1, QTableWidgetItem(""))
             
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Execution failed: {str(e)}")
