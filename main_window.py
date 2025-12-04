@@ -15,10 +15,10 @@ from PyQt5.QtWidgets import (
     QVBoxLayout, QDialog, QTableWidget, QTableWidgetItem,
     QHeaderView, QDialogButtonBox, QLabel, QTextEdit,
     QGroupBox, QListWidget, QSizePolicy, QProgressBar,
-    QWidget, QHBoxLayout, QPushButton, QTabWidget, QApplication
+    QWidget, QHBoxLayout, QPushButton, QTabWidget, QApplication, QSplashScreen
 )
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QObject
-from PyQt5.QtGui import QColor, QIcon, QFont
+from PyQt5.QtGui import QColor, QIcon, QFont, QPixmap
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
@@ -1663,9 +1663,29 @@ class MainWindow(QMainWindow):
 if __name__ == '__main__':
     # 테스트 실행
     import sys
-    from PyQt5.QtWidgets import QApplication
+    # High DPI 디스플레이 지원
+    if hasattr(Qt, 'AA_EnableHighDpiScaling'):
+        QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
+    if hasattr(Qt, 'AA_UseHighDpiPixmaps'):
+        QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
 
     app = QApplication(sys.argv)
+    
+    # 스플래시 화면 표시
+    icon_path = os.path.join(os.path.dirname(__file__), 'ProgramIcon.png')
+    if os.path.exists(icon_path):
+        splash_pix = QPixmap(icon_path)
+        splash_pix = splash_pix.scaled(500, 500, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        splash = QSplashScreen(splash_pix, Qt.WindowStaysOnTopHint)
+        splash.show()
+        app.processEvents()
+    else:
+        splash = None
+
     window = MainWindow()
     window.show()
+    
+    if splash:
+        splash.finish(window)
+        
     sys.exit(app.exec_())
