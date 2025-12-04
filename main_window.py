@@ -16,9 +16,9 @@ from PyQt5.QtWidgets import (
     QHeaderView, QDialogButtonBox, QLabel, QTextEdit,
     QGroupBox, QListWidget, QSizePolicy, QProgressBar,
     QWidget, QHBoxLayout, QPushButton, QTabWidget, QApplication, QSplashScreen,
-    QComboBox, QLineEdit, QScrollArea
+    QComboBox, QLineEdit, QScrollArea, QTableView
 )
-from PyQt5.QtCore import Qt, QThread, pyqtSignal, QObject
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QObject, QAbstractTableModel
 from PyQt5.QtGui import QColor, QIcon, QFont, QPixmap
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
@@ -32,13 +32,45 @@ except ImportError:
     SCIPY_AVAILABLE = False
 
 
+
+class PandasModel(QAbstractTableModel):
+    """Pandas DataFrame을 위한 고성능 모델"""
+    def __init__(self, data):
+        super().__init__()
+        self._data = data
+
+    def rowCount(self, parent=None):
+        return self._data.shape[0]
+
+    def columnCount(self, parent=None):
+        return self._data.shape[1]
+
+    def data(self, index, role=Qt.DisplayRole):
+        if index.isValid():
+            if role == Qt.DisplayRole:
+                return str(self._data.iloc[index.row(), index.column()])
+            
+            # Diff 컬럼 빨간색 처리
+            if role == Qt.ForegroundRole:
+                col_name = self._data.columns[index.column()]
+                if col_name == 'Diff' or col_name.endswith('_Diff'):
+                    return QColor("#FF5555")
+                    
+        return None
+
+    def headerData(self, col, orientation, role):
+        if orientation == Qt.Horizontal and role == Qt.DisplayRole:
+            return self._data.columns[col]
+        return None
+
+
 class TableViewDialog(QDialog):
-    """데이터 테이블을 보여주는 팝업 다이얼로그 (탭 지원)"""
+    """데이터 테이블을 보여주는 팝업 다이얼로그 (탭 지원, QTableView + PandasModel)"""
     
     def __init__(self, parent=None, data=None, headers=None, data_dict=None):
         """
         Args:
-            data: Single table data (Legacy support)
+            data: Single table data (Legacy support - numpy array or list)
             headers: Single table headers (Legacy support)
             data_dict: Dictionary {TabName: (Data, Headers)} for multiple tabs
         """
@@ -71,17 +103,12 @@ class TableViewDialog(QDialog):
             QTabBar::tab:hover:!selected {
                 background-color: #3E3E42;
             }
-            QTableWidget {
+            QTableView {
                 background-color: #252526;
                 border: none;
                 gridline-color: #3C3C3C;
                 color: #E0E0E0;
-            }
-            QTableWidget::item {
-                padding: 5px;
-            }
-            QTableWidget::item:selected {
-                background-color: #007ACC;
+                selection-background-color: #007ACC;
             }
             QHeaderView::section {
                 background-color: #333337;
@@ -116,8 +143,8 @@ class TableViewDialog(QDialog):
             # 탭 모드
             for tab_name, (tab_data, tab_headers) in data_dict.items():
                 self.add_tab(tab_name, tab_data, tab_headers)
-        elif data is not None and headers is not None:
-            # 레거시 모드 (단일 탭)
+        elif data is not None:
+            # 레거시 모드 (단일 탭) - DataFrame이거나 headers가 있는 경우
             self.add_tab("Data", data, headers)
             
         # 닫기 버튼
@@ -125,26 +152,25 @@ class TableViewDialog(QDialog):
         button_box.rejected.connect(self.close)
         layout.addWidget(button_box)
 
-    def add_tab(self, name, data, headers):
+    def add_tab(self, name, data, headers=None):
         """탭 추가 헬퍼 메서드"""
-        table = QTableWidget()
-        table.setColumnCount(len(headers))
-        table.setRowCount(len(data))
-        table.setHorizontalHeaderLabels(headers)
-        table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        # data가 DataFrame이 아니면 변환
+        if not isinstance(data, pd.DataFrame):
+            if headers:
+                df = pd.DataFrame(data, columns=headers)
+            else:
+                df = pd.DataFrame(data)
+        else:
+            df = data
+
+        table = QTableView()
+        model = PandasModel(df)
+        table.setModel(model)
         
-        # 데이터 채우기 (최대 1000행까지만 표시하여 성능 최적화)
-        max_rows = min(len(data), 1000)
-        for row in range(max_rows):
-            for col, value in enumerate(data[row]):
-                item = QTableWidgetItem(str(value))
-                
-                # Diff 컬럼 (헤더 이름으로 판단) 빨간색 처리
-                if headers[col].endswith('_Diff'):
-                    item.setForeground(QColor("#FF5555")) # 밝은 빨강 (다크 테마용)
-                    
-                table.setItem(row, col, item)
-                
+        # 헤더 설정
+        table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        table.verticalHeader().setVisible(False) # 행 번호 숨김 (Index 컬럼이 있으므로)
+        
         self.tabs.addTab(table, name)
 
 
@@ -399,6 +425,102 @@ class MainWindow(QMainWindow):
         self.setup_stats_and_log_ui()  # 통계 및 로그 UI 추가
         self.setup_preview_ui() # 프리뷰 UI 추가
         self.connect_signals()
+        
+        # UI Layout Adjustments (Height & Spacing)
+        # 4. Data Range Selection 높이 늘리기
+        if hasattr(self, 'groupDataRange'):
+            self.groupDataRange.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
+            
+        # 5. Modification Method 높이 늘리기 (균형을 위해)
+        if hasattr(self, 'groupModification'):
+            self.groupModification.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
+            
+        # Remove spacer from layoutCol1 to allow widgets to fill height
+        # layoutCol1의 마지막 아이템이 spacer인지 확인하고 제거
+        if hasattr(self, 'layoutCol1'):
+            count = self.layoutCol1.count()
+            if count > 0:
+                item = self.layoutCol1.itemAt(count - 1)
+                if item.spacerItem():
+                    self.layoutCol1.removeItem(item)
+
+        # 6. Statistics Log 높이 늘리기 (layoutCol2)
+        # Remove spacer from layoutCol2 to allow groupStatsLog to fill height
+        if hasattr(self, 'layoutCol2'):
+            # Iterate backwards to find and remove spacers
+            for i in range(self.layoutCol2.count() - 1, -1, -1):
+                item = self.layoutCol2.itemAt(i)
+                if item.spacerItem():
+                    self.layoutCol2.removeItem(item)
+                    
+        # 8. Save 그룹 높이 유지 (Preferred)
+        if hasattr(self, 'groupSave'):
+            self.groupSave.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
+            
+        # 7. Preview Results Layout Restructuring
+        self.restructure_results_layout()
+
+        # 8. Column Swap: Preview Results (Col 3) <-> Statistics/Save (Col 2)
+        # mainLayout에서 위젯 순서 변경
+        if hasattr(self, 'mainLayout') and hasattr(self, 'panelCol2') and hasattr(self, 'groupResults'):
+            # 현재 mainLayout 구성: [panelCol1, panelCol2, groupResults]
+            # 목표: [panelCol1, groupResults, panelCol2]
+            
+            # 기존 위젯 제거 (레이아웃에서만 제거되고 객체는 유지됨)
+            self.mainLayout.removeWidget(self.panelCol2)
+            self.mainLayout.removeWidget(self.groupResults)
+            
+            # 순서대로 다시 추가 (index 1부터)
+            # 1. Preview Results (Middle - Wide)
+            self.mainLayout.insertWidget(1, self.groupResults, stretch=1)
+            
+            # 2. Statistics/Save (Right - Narrow)
+            self.mainLayout.insertWidget(2, self.panelCol2, stretch=0)
+            
+            # panelCol2의 크기 정책 조정 (Fixed width 유지)
+            self.panelCol2.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
+            self.panelCol2.setMinimumWidth(300)
+            self.panelCol2.setMaximumWidth(350)
+
+    def restructure_results_layout(self):
+        """Preview Results 섹션 레이아웃 재구성 (Code-behind)"""
+        # 위젯 존재 확인
+        if not (hasattr(self, 'groupResults') and 
+                hasattr(self, 'frameGraph') and 
+                hasattr(self, 'groupStatistics') and 
+                hasattr(self, 'groupModificationPreview')):
+            return
+
+        # 1. 위젯들을 임시로 self(MainWindow)로 reparent하여 기존 레이아웃 삭제 시 소멸 방지
+        self.frameGraph.setParent(self)
+        self.groupStatistics.setParent(self)
+        self.groupModificationPreview.setParent(self)
+        
+        # 2. 기존 레이아웃 삭제 (Dummy Widget에 할당하여 GC 유도)
+        if self.groupResults.layout():
+            QWidget().setLayout(self.groupResults.layout())
+            
+        # 3. 새로운 Vertical Layout 생성
+        main_layout = QVBoxLayout(self.groupResults)
+        main_layout.setSpacing(10)
+        main_layout.setContentsMargins(10, 10, 10, 10)
+        
+        # 4. 상단: 그래프 추가
+        # 그래프가 더 많은 공간을 차지하도록 Stretch 설정 (예: 2)
+        main_layout.addWidget(self.frameGraph, 2)
+        
+        # 5. 하단: 통계 + 프리뷰 (Horizontal Layout)
+        bottom_layout = QHBoxLayout()
+        bottom_layout.setSpacing(10)
+        
+        # 좌측: 통계 요약 (Stretch 1)
+        bottom_layout.addWidget(self.groupStatistics, 1)
+        
+        # 우측: 수정 미리보기 (Stretch 1) - 1:1 비율
+        bottom_layout.addWidget(self.groupModificationPreview, 1)
+        
+        # 하단 레이아웃을 메인 레이아웃에 추가 (Stretch 1)
+        main_layout.addLayout(bottom_layout, 1)
 
     def setup_preview_ui(self):
         """프리뷰 섹션에 Table View 버튼 추가"""
@@ -467,32 +589,56 @@ class MainWindow(QMainWindow):
             
             # 모든 컬럼에 대해 탭 생성
             for col in self.df.columns:
-                # Original Data
-                orig_subset = self.df[col].iloc[start_row:end_row].values
+                # Original Data (전체 데이터)
+                orig_values = self.df[col].values
+                
+                # Modified Data 초기화 (Origin과 동일하게 시작)
+                mod_values = orig_values.copy()
+                
+                # Preview 활성화 상태이고, 현재 컬럼이 선택된 컬럼 중 하나일 때만 Modified 값 계산
+                if self.preview_active and col in selected_cols:
+                    # 선택된 범위에 대해서만 수정 적용
+                    # 주의: apply_modification은 DataFrame을 반환함
+                    subset_df = pd.DataFrame(self.df[col].iloc[start_row:end_row])
+                    mod_subset_df = self.apply_modification(subset_df, method, value, ratio)
+                    
+                    # 수정된 값을 전체 배열에 반영
+                    # 길이가 다를 수 있음 (Resampling 등) -> 이 경우 전체 길이를 조정해야 함
+                    # 하지만 현재 요구사항은 "내가 선택한 데이터가 아니면 Modified는 0(Origin과 동일), Diff는 0"
+                    # Resampling의 경우 행 수가 바뀌므로 이 로직이 복잡해짐.
+                    # 일단 1:1 매핑되는 수정(Add, Multiply, Set 등)을 가정하고 구현.
+                    # Resampling이나 Delete의 경우 원본과 길이가 달라지므로 별도 처리가 필요하지만,
+                    # 여기서는 1:1 매핑을 우선으로 함.
+                    
+                    subset_values = mod_subset_df.iloc[:, 0].values
+                    
+                    if len(subset_values) == (end_row - start_row):
+                        mod_values[start_row:end_row] = subset_values
+                    else:
+                        # 길이가 달라지는 경우 (예: Resampling)
+                        # 이 경우 전체 데이터를 재구성해야 함.
+                        # 복잡성을 피하기 위해, 길이가 달라지면 해당 부분만 교체하고 나머지는 유지?
+                        # 하지만 배열 크기가 바뀌므로 numpy array로는 안됨.
+                        # 리스트로 변환하여 처리
+                        mod_list = list(orig_values)
+                        mod_list[start_row:end_row] = subset_values
+                        mod_values = np.array(mod_list)
+
+                # 데이터 타입 확인 (수치형인지)
+                is_numeric = pd.api.types.is_numeric_dtype(self.df[col])
+                
+                # 길이 맞춤
+                max_len = max(len(orig_values), len(mod_values))
                 
                 # 데이터 구성
                 col_data = {}
                 
-                # 기본적으로 Modified는 Origin과 동일하게 설정 (변경 없음)
-                mod_values = orig_subset
-                
-                # Preview 활성화 상태이고, 현재 컬럼이 선택된 컬럼 중 하나일 때만 Modified 값 계산
-                if self.preview_active and col in selected_cols:
-                    mod_subset_df = self.apply_modification(pd.DataFrame(self.df[col].iloc[start_row:end_row]), method, value, ratio)
-                    mod_values = mod_subset_df.iloc[:, 0].values
-                
-                # 데이터 타입 확인 (수치형인지)
-                is_numeric = pd.api.types.is_numeric_dtype(self.df[col])
-                
-                # 길이 맞춤 (Resampling 대응)
-                max_len = max(len(orig_subset), len(mod_values))
-                
-                # Index
-                col_data['Index'] = range(max_len)
+                # Index 제거 (요청사항)
+                # col_data['Index'] = range(max_len)
                 
                 # Origin Padding
-                orig_padded = np.full(max_len, np.nan, dtype=object) # Object type to hold strings if needed
-                orig_padded[:len(orig_subset)] = orig_subset
+                orig_padded = np.full(max_len, np.nan, dtype=object)
+                orig_padded[:len(orig_values)] = orig_values
                 col_data['Origin'] = orig_padded
                 
                 # Modified Padding
@@ -501,21 +647,21 @@ class MainWindow(QMainWindow):
                 col_data['Modified'] = mod_padded
                 
                 # Diff (수치형이고 길이가 같을 때만)
-                if is_numeric and len(orig_subset) == len(mod_values):
+                if is_numeric and len(orig_values) == len(mod_values):
                     try:
-                        col_data['Diff'] = mod_values - orig_subset
+                        # Diff 계산 (Modified - Origin)
+                        # 선택되지 않은 구간은 0이 됨 (Modified == Origin)
+                        col_data['Diff'] = mod_values - orig_values
                     except:
-                        col_data['Diff'] = np.zeros_like(orig_subset) # 계산 실패 시 0으로 채움
+                        col_data['Diff'] = np.zeros_like(orig_values)
                 elif is_numeric:
-                     # 길이가 다르면 Diff 계산 불가 (Resampling 등) -> NaN 또는 0 처리?
-                     # 여기서는 NaN으로 채움
                      col_data['Diff'] = np.full(max_len, np.nan)
                 
                 # DataFrame 생성
                 comp_df = pd.DataFrame(col_data)
                 
-                # 탭 데이터 저장
-                tabs_data[col] = (comp_df.values, comp_df.columns.tolist())
+                # 탭 데이터 저장 (DataFrame 직접 전달)
+                tabs_data[col] = (comp_df, None)
 
             # 팝업 표시
             dialog = TableViewDialog(self, data_dict=tabs_data)
@@ -528,9 +674,27 @@ class MainWindow(QMainWindow):
 
 
 
-        # 상태 표시줄 설정
-        self.statusbar.showMessage("Ready. Please load a data file.")
-        self.lblFileInfo.setText("No file loaded")
+
+
+    def show_original_data_popup(self):
+        """원본 전체 데이터를 보여주는 팝업 테이블"""
+        if self.df is None:
+            self.show_custom_message_box("Warning", "Please load data first.", QMessageBox.Warning)
+            return
+
+        try:
+            # 전체 데이터와 헤더 준비
+            # data = self.df.values
+            # headers = self.df.columns.tolist()
+            
+            # 팝업 표시 (Legacy Mode: Single Table) - DataFrame 직접 전달
+            dialog = TableViewDialog(self, data=self.df)
+            dialog.setWindowTitle("Original Data View")
+            dialog.resize(1000, 700)
+            dialog.exec_()
+            
+        except Exception as e:
+            self.show_custom_message_box("Error", f"Failed to show data table: {str(e)}", QMessageBox.Critical)
 
     def setup_graph(self):
         """Matplotlib 그래프 설정"""
@@ -620,6 +784,9 @@ class MainWindow(QMainWindow):
             }
         """)
         
+        # 세로로 늘어나도록 설정
+        self.groupTimeConfig.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
+        
         layout = QVBoxLayout(self.groupTimeConfig)
         layout.setSpacing(2)
         layout.setContentsMargins(4, 8, 4, 4)
@@ -639,6 +806,9 @@ class MainWindow(QMainWindow):
         self.comboTimeCol.setEnabled(False)
         time_col_layout.addWidget(self.comboTimeCol)
         layout.addLayout(time_col_layout)
+        
+        # Add spacing
+        layout.addSpacing(10)
         
         # 4. 날짜 포맷 입력
         format_layout = QHBoxLayout()
@@ -691,22 +861,16 @@ class MainWindow(QMainWindow):
         comp_layout_2.addWidget(self.chkSecond)
         layout.addLayout(comp_layout_2)
         
-        # 초기 상태 설정
-        for chk in [self.chkYear, self.chkMonth, self.chkDay, self.chkHour, self.chkMinute, self.chkSecond]:
-            chk.setEnabled(False)
-            
         # UI에 추가 (Unit Config 다음에 추가)
-        # leftPanelLayout의 인덱스를 찾아서 삽입해야 함 (Unit Config가 1번 인덱스라고 가정)
+        # layoutCol1의 인덱스를 찾아서 삽입해야 함 (Unit Config가 1번 인덱스라고 가정)
         # 안전하게 groupUnitConfig 다음에 추가하기 위해 layout을 순회하거나 끝에 추가 후 이동
         
-        # 현재 leftPanelLayout 구조:
+        # 현재 layoutCol1 구조:
         # 0: groupDataLoad
         # 1: groupUnitConfig
-        # 2: groupDataRange
-        # 3: groupModificationMethod
         
-        # 2번 인덱스(groupDataRange 앞)에 삽입
-        self.leftPanelLayout.insertWidget(2, self.groupTimeConfig)
+        # 2번 인덱스(groupUnitConfig 다음)에 삽입
+        self.layoutCol1.insertWidget(2, self.groupTimeConfig)
 
     def toggle_time_ui(self, state):
         """시간 설정 UI 활성화/비활성화 토글"""
@@ -758,9 +922,14 @@ class MainWindow(QMainWindow):
         self.tableQuickStats = QTableWidget(0, 5)
         self.tableQuickStats.setHorizontalHeaderLabels(["Column", "Min", "Max", "Avg", "Std"])
         self.tableQuickStats.verticalHeader().setVisible(False)
+        self.tableQuickStats.setHorizontalHeaderLabels(["Column", "Min", "Max", "Avg", "Std"])
+        self.tableQuickStats.verticalHeader().setVisible(False)
         header = self.tableQuickStats.horizontalHeader()
-        header.setSectionResizeMode(QHeaderView.Stretch)
-        header.setSectionResizeMode(0, QHeaderView.ResizeToContents) # Column Name은 내용에 맞게
+        
+        # 컬럼 너비 조정 (내용에 맞게 + 마지막 컬럼 채우기)
+        header.setSectionResizeMode(QHeaderView.ResizeToContents)
+        header.setStretchLastSection(True)
+        
         self.tableQuickStats.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.tableQuickStats.setStyleSheet("""
             QTableWidget {
@@ -768,13 +937,14 @@ class MainWindow(QMainWindow):
                 border: 1px solid #3C3C3C;
                 color: #E0E0E0;
                 gridline-color: #3C3C3C;
+                font-size: 10px; /* 폰트 크기 축소 */
             }
             QHeaderView::section {
                 background-color: #333337;
                 color: #AAAAAA;
                 padding: 2px;
                 border: none;
-                font-size: 11px;
+                font-size: 10px; /* 헤더 폰트 크기 축소 */
             }
         """)
             
@@ -801,23 +971,18 @@ class MainWindow(QMainWindow):
         self.listLog.addItem("Ready. System initialized.")
         layout.addWidget(self.listLog, 1) # Stretch 1
         
-        # 4. 왼쪽 패널에 추가 (Spacer 제거 후 추가)
-        # 기존 Spacer 제거하여 GroupBox가 남은 공간을 차지하도록 함
-        count = self.leftPanelLayout.count()
-        if count > 0:
-            # 마지막 아이템(Spacer) 제거
-            item = self.leftPanelLayout.takeAt(count - 1)
-            if item.widget():
-                # 만약 위젯이라면 다시 넣어줌 (Spacer가 아닐 경우 대비)
-                self.leftPanelLayout.addWidget(item.widget())
-                
-        self.leftPanelLayout.addWidget(self.groupStatsLog)
+        # 4. 두 번째 컬럼 패널(panelCol2)에 추가 (맨 위에)
+        # layoutCol2 구조:
+        # 0: groupStatsLog (New)
+        # 1: groupSave (Existing from XML)
+        
+        self.layoutCol2.insertWidget(0, self.groupStatsLog)
 
     def connect_signals(self):
         """시그널-슬롯 연결"""
         # 버튼 연결
         self.btnLoadFile.clicked.connect(self.browse_file)
-        self.btnTableView.clicked.connect(self.show_preview_popup)
+        self.btnTableView.clicked.connect(self.show_original_data_popup)
         self.btnPreviewSelection.clicked.connect(self.preview_selection)
         self.btnMethodInfo.clicked.connect(self.show_method_info)
         self.btnPreview.clicked.connect(self.preview_modification)
