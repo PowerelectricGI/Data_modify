@@ -1546,7 +1546,7 @@ class MainWindow(QMainWindow):
         if file_path:
             try:
                 if file_path.endswith('.csv'):
-                    self.df.to_csv(file_path, index=False)
+                    self.df.to_csv(file_path, index=False, encoding='utf-8-sig')
                 elif file_path.endswith('.xlsx'):
                     self.df.to_excel(file_path, index=False)
                 self.add_log(f"Saved to {file_path}")
