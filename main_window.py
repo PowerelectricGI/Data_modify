@@ -628,12 +628,12 @@ class MainWindow(QMainWindow):
         stats_label.setStyleSheet("color: white; font-weight: normal; margin-bottom: 3px; font-size: 11px;")
         layout.addWidget(stats_label)
         
-        self.tableStats = QTableWidget(0, 5)
-        self.tableStats.setHorizontalHeaderLabels(["Column", "Min", "Max", "Avg", "Std"])
-        self.tableStats.verticalHeader().setVisible(False)
-        self.tableStats.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.tableStats.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.tableStats.setStyleSheet("""
+        self.tableQuickStats = QTableWidget(0, 5)
+        self.tableQuickStats.setHorizontalHeaderLabels(["Column", "Min", "Max", "Avg", "Std"])
+        self.tableQuickStats.verticalHeader().setVisible(False)
+        self.tableQuickStats.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.tableQuickStats.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.tableQuickStats.setStyleSheet("""
             QTableWidget {
                 background-color: #1E1E1E;
                 border: 1px solid #3C3C3C;
@@ -649,7 +649,7 @@ class MainWindow(QMainWindow):
             }
         """)
             
-        layout.addWidget(self.tableStats, 1) # Stretch 1
+        layout.addWidget(self.tableQuickStats, 1) # Stretch 1
         
         # 3. 로그 리스트 (History)
         log_label = QLabel("📝 Operation Log")
@@ -719,7 +719,7 @@ class MainWindow(QMainWindow):
             return
             
         # 기존 테이블 초기화
-        self.tableStats.setRowCount(0)
+        self.tableQuickStats.setRowCount(0)
         
         numeric_cols = []
         for col in self.df.columns:
@@ -730,20 +730,87 @@ class MainWindow(QMainWindow):
         if not numeric_cols:
             return
 
-        self.tableStats.setRowCount(len(numeric_cols))
+        self.tableQuickStats.setRowCount(len(numeric_cols))
         
         for i, col in enumerate(numeric_cols):
             stats = self.df[col].describe()
             
             # Column Name
-            self.tableStats.setItem(i, 0, QTableWidgetItem(str(col)))
+            self.tableQuickStats.setItem(i, 0, QTableWidgetItem(str(col)))
             # Stats
-            self.tableStats.setItem(i, 1, QTableWidgetItem(f"{stats['min']:.4g}"))
-            self.tableStats.setItem(i, 2, QTableWidgetItem(f"{stats['max']:.4g}"))
-            self.tableStats.setItem(i, 3, QTableWidgetItem(f"{stats['mean']:.4g}"))
-            self.tableStats.setItem(i, 4, QTableWidgetItem(f"{stats['std']:.4g}"))
+            self.tableQuickStats.setItem(i, 1, QTableWidgetItem(f"{stats['min']:.4g}"))
+            self.tableQuickStats.setItem(i, 2, QTableWidgetItem(f"{stats['max']:.4g}"))
+            self.tableQuickStats.setItem(i, 3, QTableWidgetItem(f"{stats['mean']:.4g}"))
+            self.tableQuickStats.setItem(i, 4, QTableWidgetItem(f"{stats['std']:.4g}"))
             
         self.add_log(f"Stats updated for {len(numeric_cols)} columns")
+
+    def update_summary_table(self, original_df, modified_df):
+        """Statistics Summary 테이블 업데이트 (Original vs Modified)"""
+        # .ui 파일에 정의된 tableStats 사용
+        if not hasattr(self, 'tableStats'): return
+        
+        # 테이블 초기화
+        self.tableStats.setRowCount(0)
+        self.tableStats.setColumnCount(3)
+        self.tableStats.setHorizontalHeaderLabels(["Metric", "Original", "Modified"])
+        
+        # 비교할 컬럼들 (수치형만)
+        cols = [c for c in modified_df.columns if pd.api.types.is_numeric_dtype(modified_df[c])]
+        
+        if not cols: return
+        
+        # 행 추가
+        row_idx = 0
+        for col in cols:
+            # Original Stats
+            if col in original_df.columns:
+                orig_stats = original_df[col].describe()
+            else:
+                orig_stats = None
+                
+            # Modified Stats
+            mod_stats = modified_df[col].describe()
+            
+            # Metrics to show
+            metrics = ['min', 'max', 'mean', 'std']
+            metric_names = ['Min', 'Max', 'Avg', 'Std']
+            
+            # Header Row for Column Name (if multiple columns)
+            if len(cols) > 1:
+                self.tableStats.insertRow(row_idx)
+                self.tableStats.setItem(row_idx, 0, QTableWidgetItem(f"--- {col} ---"))
+                self.tableStats.setSpan(row_idx, 0, 1, 3) # Span across 3 columns
+                # Style for header row
+                for c in range(3):
+                    item = self.tableStats.item(row_idx, c)
+                    if item:
+                        item.setBackground(QColor("#333337"))
+                        item.setForeground(QColor("#00CED1"))
+                row_idx += 1
+            
+            for m, m_name in zip(metrics, metric_names):
+                self.tableStats.insertRow(row_idx)
+                
+                # Metric Name
+                self.tableStats.setItem(row_idx, 0, QTableWidgetItem(m_name))
+                
+                # Original Value
+                if orig_stats is not None:
+                    self.tableStats.setItem(row_idx, 1, QTableWidgetItem(f"{orig_stats[m]:.4g}"))
+                else:
+                    self.tableStats.setItem(row_idx, 1, QTableWidgetItem("-"))
+                    
+                # Modified Value
+                self.tableStats.setItem(row_idx, 2, QTableWidgetItem(f"{mod_stats[m]:.4g}"))
+                
+                # Highlight differences
+                if orig_stats is not None and abs(orig_stats[m] - mod_stats[m]) > 1e-9:
+                     self.tableStats.item(row_idx, 2).setForeground(QColor("#FF5555")) # Red for changed values
+                
+                row_idx += 1
+                
+        self.tableStats.resizeColumnsToContents()
 
     # ============ 이벤트 핸들러 메서드 ============
 
@@ -1355,6 +1422,9 @@ class MainWindow(QMainWindow):
             subset = self.df.iloc[start_row:end_row][selected_cols]
             
             modified_subset = self.apply_modification(subset, method, value, ratio)
+            
+            # Statistics Summary 업데이트 (Original vs Modified)
+            self.update_summary_table(subset, modified_subset)
             
             # Preview Table용 데이터 수집
             preview_data = {}
