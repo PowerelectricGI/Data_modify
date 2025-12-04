@@ -633,8 +633,8 @@ class MainWindow(QMainWindow):
                 # 데이터 구성
                 col_data = {}
                 
-                # Index 제거 (요청사항)
-                # col_data['Index'] = range(max_len)
+                # Index 추가 (요청사항)
+                col_data['Index'] = range(max_len)
                 
                 # Origin Padding
                 orig_padded = np.full(max_len, np.nan, dtype=object)
@@ -662,6 +662,90 @@ class MainWindow(QMainWindow):
                 
                 # 탭 데이터 저장 (DataFrame 직접 전달)
                 tabs_data[col] = (comp_df, None)
+
+            # Time Column 처리 (Upsampling 시 시간 보간)
+            time_col = self.comboTimeCol.currentText()
+            if time_col != "None" and time_col in self.df.columns:
+                try:
+                    # 원본 시간 데이터 추출
+                    orig_time_values = self.df[time_col].iloc[start_row:end_row].values
+                    
+                    # Upsampling 여부 확인 (첫 번째 컬럼 기준)
+                    first_col = selected_cols[0]
+                    mod_len = len(tabs_data[first_col][0])
+                    orig_len = len(orig_time_values)
+                    
+                    if mod_len > orig_len: # Upsampling
+                        # 시간 데이터를 수치형(timestamp)으로 변환
+                        # 날짜 포맷이 지정되어 있으면 pd.to_datetime 사용
+                        try:
+                            # 1. Datetime으로 변환 시도
+                            time_series = pd.to_datetime(orig_time_values, errors='coerce')
+                            
+                            # 2. Timestamp(seconds)로 변환
+                            # NaT는 NaN이 됨
+                            timestamps = time_series.astype(np.int64) // 10**9
+                            
+                            # 만약 변환 실패(NaT)가 많다면, 원래 수치형 데이터일 수 있음
+                            if time_series.isna().all():
+                                timestamps = pd.to_numeric(orig_time_values, errors='coerce')
+                        except:
+                            # 변환 실패 시 (숫자형 시간 등) 그대로 사용
+                            timestamps = pd.to_numeric(orig_time_values, errors='coerce')
+                        
+                        # 보간을 위한 인덱스 생성
+                        old_indices = np.linspace(0, orig_len - 1, orig_len)
+                        new_indices = np.linspace(0, orig_len - 1, mod_len)
+                        
+                        # 선형 보간
+                        new_timestamps = np.interp(new_indices, old_indices, timestamps)
+                        
+                        # 다시 datetime으로 변환 (원래 포맷 유지 노력)
+                        try:
+                            # 원래 데이터가 datetime이었는지 확인
+                            is_orig_datetime = pd.api.types.is_datetime64_any_dtype(pd.to_datetime(orig_time_values, errors='coerce'))
+                            if is_orig_datetime:
+                                new_time_values = pd.to_datetime(new_timestamps, unit='s')
+                            else:
+                                new_time_values = new_timestamps
+                        except:
+                            new_time_values = new_timestamps
+                            
+                        # 모든 탭의 DataFrame에 Time 컬럼 추가 (Index 다음인 1번 위치에)
+                        for col in tabs_data:
+                            df, _ = tabs_data[col]
+                            # Time 컬럼 삽입
+                            if 'Index' in df.columns:
+                                df.insert(1, 'Time', new_time_values)
+                            else:
+                                df.insert(0, 'Time', new_time_values)
+                            
+                    else: # No Upsampling or Downsampling
+                        # 원본 시간 데이터 그대로 사용 (길이 맞춤)
+                        # Downsampling의 경우 처리가 복잡하므로 일단 Upsampling만 대응
+                        # 혹은 원본 길이만큼만 채우고 나머지는 NaN 처리할 수도 있음
+                        
+                        # 여기서는 Upsampling이 아닌 경우(길이가 같거나 줄어든 경우)
+                        # 줄어든 경우는 apply_modification에서 이미 처리되었을 것임 (Time 컬럼이 선택되지 않았으므로)
+                        # 하지만 Time 컬럼은 보통 선택되지 않으므로, Time 컬럼도 같이 줄여야 함.
+                        # 현재 로직은 Time 컬럼이 "선택된 컬럼"에 포함되지 않았을 때를 가정함.
+                        
+                        # Upsampling이 아니면 그냥 원본 Time을 붙여주거나, 
+                        # Downsampling이면 Time도 Downsampling 해야 함 (이건 추후 과제)
+                        
+                        # 일단 길이가 같은 경우만 처리 (대부분의 경우)
+                        if mod_len == orig_len:
+                             for col in tabs_data:
+                                df, _ = tabs_data[col]
+                                df.insert(0, 'Time', orig_time_values)
+                        else:
+                             # 길이가 다르면(Downsampling 등) Time 컬럼 추가 안 함 (안전하게)
+                             pass
+
+                except Exception as e:
+                    print(f"Time column processing error: {e}")
+                    # 에러 발생 시 Time 컬럼 없이 진행
+                    pass
 
             # 팝업 표시
             dialog = TableViewDialog(self, data_dict=tabs_data)
@@ -1510,13 +1594,37 @@ class MainWindow(QMainWindow):
 
     def apply_modification(self, df_subset, method, value, ratio):
         """데이터 수정 로직 적용 (Core Logic)"""
-        # 데이터프레임 복사 및 수치형 변환
+        # 데이터프레임 복사
         result_df = df_subset.copy()
         
-        # 모든 컬럼을 수치형으로 변환 (에러 발생 시 NaN)
-        # 이렇게 해야 mean(), interp() 등 수치 연산에서 에러가 발생하지 않음
+        # 컬럼별 타입 처리 (Datetime vs Numeric)
+        is_datetime_col = {}
+        
         for col in result_df.columns:
-            result_df[col] = pd.to_numeric(result_df[col], errors='coerce')
+            # 1. Datetime 감지
+            # 사용자가 지정한 Time Column이거나, 데이터 타입이 datetime인 경우
+            is_time_col_selected = hasattr(self, 'comboTimeCol') and self.comboTimeCol.currentText() == col
+            is_dt_type = pd.api.types.is_datetime64_any_dtype(result_df[col])
+            
+            if is_time_col_selected or is_dt_type:
+                try:
+                    # Datetime으로 변환 (이미 datetime이면 그대로, 아니면 변환 시도)
+                    result_df[col] = pd.to_datetime(result_df[col], errors='coerce')
+                    # Timestamp(float seconds)로 변환하여 연산 가능하게 함
+                    # NaT는 NaN이 됨
+                    result_df[col] = result_df[col].astype(np.int64) // 10**9
+                    # NaT였던 것은 매우 작은 음수가 되거나 0이 될 수 있으므로 주의. 
+                    # errors='coerce'로 NaT가 된 경우 int64 변환 시 음수값이 될 수 있음.
+                    # 안전하게: numeric으로 변환 후 처리
+                    is_datetime_col[col] = True
+                except:
+                    # 변환 실패 시 일반 수치형으로 처리 시도
+                    result_df[col] = pd.to_numeric(result_df[col], errors='coerce')
+                    is_datetime_col[col] = False
+            else:
+                # 일반 수치형 변환
+                result_df[col] = pd.to_numeric(result_df[col], errors='coerce')
+                is_datetime_col[col] = False
         
         # 1. Basic Operations
         if method == "Multiplication":
@@ -1657,6 +1765,15 @@ class MainWindow(QMainWindow):
             elif method == "Min":
                 result_df = grouped.min()
                 
+        # Datetime 컬럼 복원 (모든 연산 후 공통 적용)
+        for col in result_df.columns:
+            if col in is_datetime_col and is_datetime_col[col]:
+                try:
+                    # Timestamp -> Datetime
+                    result_df[col] = pd.to_datetime(result_df[col], unit='s')
+                except:
+                    pass
+
         return result_df
 
     def preview_modification(self):
@@ -1868,14 +1985,18 @@ class MainWindow(QMainWindow):
                         preview_data[col] = mod_data.iloc[:, 0].values # Preview용 저장
                     else:
                         # 선택 안 된 컬럼도 길이를 맞춰야 함 (동기화)
+                        # Upsampling이면 Linear, Downsampling이면 Average를 기본으로 사용
                         sync_method = "Linear" if ratio > 1 else "Average"
                         mod_data = self.apply_modification(col_data, sync_method, value, ratio)
                     new_parts.append(mod_data.reset_index(drop=True))
                 
                 modified_middle = pd.concat(new_parts, axis=1)
                 
-                # 합치기
-                self.df = pd.concat([df_start, modified_middle, df_end]).reset_index(drop=True)
+                # 합치기 (FutureWarning 해결: 빈 데이터프레임 제외)
+                parts_to_concat = [df_start, modified_middle, df_end]
+                parts_to_concat = [p for p in parts_to_concat if not p.empty]
+                
+                self.df = pd.concat(parts_to_concat).reset_index(drop=True)
 
             self.add_log(f"Executed: {method} on rows {start_row}~{end_row}")
             
