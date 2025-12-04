@@ -430,7 +430,7 @@ class MainWindow(QMainWindow):
     def show_preview_popup(self):
         """수정 전후 데이터를 비교하는 팝업 테이블 표시 (탭 방식)"""
         if self.df is None:
-            QMessageBox.warning(self, "Warning", "Please load data first.")
+            self.show_custom_message_box("Warning", "Please load data first.", QMessageBox.Warning)
             return
 
         try:
@@ -457,7 +457,7 @@ class MainWindow(QMainWindow):
                         selected_cols.append(chk.text())
             
             if not selected_cols:
-                QMessageBox.warning(self, "Warning", "Please select at least one column.")
+                self.show_custom_message_box("Warning", "Please select at least one column.", QMessageBox.Warning)
                 return
 
             # 3. 데이터 준비 (탭별로 구성)
@@ -522,7 +522,7 @@ class MainWindow(QMainWindow):
             dialog.exec_()
             
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to show preview table: {str(e)}")
+            self.show_custom_message_box("Error", f"Failed to show preview table: {str(e)}", QMessageBox.Critical)
 
 
 
@@ -688,7 +688,7 @@ class MainWindow(QMainWindow):
         """시그널-슬롯 연결"""
         # 버튼 연결
         self.btnLoadFile.clicked.connect(self.browse_file)
-        self.btnTableView.clicked.connect(self.show_table_view)
+        self.btnTableView.clicked.connect(self.show_preview_popup)
         self.btnPreviewSelection.clicked.connect(self.preview_selection)
         self.btnMethodInfo.clicked.connect(self.show_method_info)
         self.btnPreview.clicked.connect(self.preview_modification)
@@ -712,6 +712,34 @@ class MainWindow(QMainWindow):
         self.listLog.addItem(message)
         self.listLog.scrollToBottom()
         self.statusbar.showMessage(message)
+
+    def show_custom_message_box(self, title, message, icon_type=QMessageBox.Warning):
+        """Dark Theme 적용된 커스텀 메시지 박스 표시"""
+        msg = QMessageBox(self)
+        msg.setIcon(icon_type)
+        msg.setWindowTitle(title)
+        msg.setText(message)
+        msg.setStyleSheet("""
+            QMessageBox {
+                background-color: #1E1E1E;
+                color: #E0E0E0;
+            }
+            QLabel {
+                color: #E0E0E0;
+            }
+            QPushButton {
+                background-color: #3C3C3C;
+                color: #E0E0E0;
+                border: 1px solid #555555;
+                border-radius: 4px;
+                padding: 4px 12px;
+            }
+            QPushButton:hover {
+                background-color: #505050;
+                border-color: #007ACC;
+            }
+        """)
+        msg.exec_()
 
     def update_statistics(self):
         """현재 데이터의 통계 업데이트"""
@@ -1550,9 +1578,9 @@ class MainWindow(QMainWindow):
                 elif file_path.endswith('.xlsx'):
                     self.df.to_excel(file_path, index=False)
                 self.add_log(f"Saved to {file_path}")
-                QMessageBox.information(self, "Success", "File saved successfully.")
+                self.show_custom_message_box("Success", "File saved successfully.", QMessageBox.Information)
             except Exception as e:
-                QMessageBox.critical(self, "Error", f"Save failed: {str(e)}")
+                self.show_custom_message_box("Error", f"Save failed: {str(e)}", QMessageBox.Critical)
 
     def export_graph(self):
         """그래프 이미지로 내보내기"""
