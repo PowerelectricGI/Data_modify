@@ -1426,6 +1426,10 @@ class MainWindow(QMainWindow):
             # Statistics Summary 업데이트 (Original vs Modified)
             self.update_summary_table(subset, modified_subset)
             
+            # GroupBox Title 업데이트 (Method 표시)
+            if hasattr(self, 'groupStatistics'):
+                self.groupStatistics.setTitle(f"Statistics Summary - {method}")
+            
             # Preview Table용 데이터 수집
             preview_data = {}
             
