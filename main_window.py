@@ -425,6 +425,7 @@ class MainWindow(QMainWindow):
         self.setup_stats_and_log_ui()  # 통계 및 로그 UI 추가
         self.setup_preview_ui() # 프리뷰 UI 추가
         self.connect_signals()
+        self.setup_copyright()  # 저작권 표시 추가
         
         # UI Layout Adjustments (Height & Spacing)
         # 4. Data Range Selection 높이 늘리기
@@ -521,6 +522,31 @@ class MainWindow(QMainWindow):
         
         # 하단 레이아웃을 메인 레이아웃에 추가 (Stretch 1)
         main_layout.addLayout(bottom_layout, 1)
+
+    def setup_copyright(self):
+        """저작권 표시 라벨 추가 (오른쪽 가장 아래)"""
+        # Status Bar가 없으면 생성됨
+        status_bar = self.statusBar()
+        
+        # 스타일 설정 (다크 테마에 맞게)
+        status_bar.setStyleSheet("""
+            QStatusBar {
+                background-color: #1E1E1E;
+                color: #E0E0E0;
+                border-top: 1px solid #3C3C3C;
+            }
+            QLabel {
+                color: #808080;
+                font-size: 11px;
+                padding-right: 10px;
+            }
+        """)
+        
+        # 저작권 라벨 생성
+        copyright_label = QLabel("(c)2025 GIHOONKIM. All rights reserved.")
+        
+        # addPermanentWidget은 우측 정렬됨
+        status_bar.addPermanentWidget(copyright_label)
 
     def setup_preview_ui(self):
         """프리뷰 섹션에 Table View 버튼 추가"""
