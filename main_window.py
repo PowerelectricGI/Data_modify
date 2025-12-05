@@ -665,7 +665,8 @@ class MainWindow(QMainWindow):
 
             # Time Column 처리 (Upsampling 시 시간 보간)
             time_col = self.comboTimeCol.currentText()
-            if time_col != "None" and time_col in self.df.columns:
+            # Time Column Exists가 체크되어 있을 때만 처리
+            if self.chkTimeExists.isChecked() and time_col != "None" and time_col in self.df.columns:
                 try:
                     # 원본 시간 데이터 추출
                     orig_time_values = self.df[time_col].iloc[start_row:end_row].values
@@ -720,27 +721,36 @@ class MainWindow(QMainWindow):
                             else:
                                 df.insert(0, 'Time', new_time_values)
                             
-                    else: # No Upsampling or Downsampling
-                        # 원본 시간 데이터 그대로 사용 (길이 맞춤)
-                        # Downsampling의 경우 처리가 복잡하므로 일단 Upsampling만 대응
-                        # 혹은 원본 길이만큼만 채우고 나머지는 NaN 처리할 수도 있음
-                        
-                        # 여기서는 Upsampling이 아닌 경우(길이가 같거나 줄어든 경우)
-                        # 줄어든 경우는 apply_modification에서 이미 처리되었을 것임 (Time 컬럼이 선택되지 않았으므로)
-                        # 하지만 Time 컬럼은 보통 선택되지 않으므로, Time 컬럼도 같이 줄여야 함.
-                        # 현재 로직은 Time 컬럼이 "선택된 컬럼"에 포함되지 않았을 때를 가정함.
-                        
-                        # Upsampling이 아니면 그냥 원본 Time을 붙여주거나, 
-                        # Downsampling이면 Time도 Downsampling 해야 함 (이건 추후 과제)
-                        
-                        # 일단 길이가 같은 경우만 처리 (대부분의 경우)
+                            
+                    elif mod_len < orig_len: # Downsampling
+                        # Time Column Downsampling
+                        try:
+                            # apply_modification을 사용하여 시간 컬럼 다운샘플링 (Min 사용 -> 시작 시간)
+                            time_subset = pd.DataFrame(self.df[time_col].iloc[start_row:end_row])
+                            downsampled_time = self.apply_modification(time_subset, "Min", 0, ratio)
+                            new_time_values = downsampled_time.iloc[:, 0].values
+                            
+                            # 길이가 맞는지 확인
+                            if len(new_time_values) == mod_len:
+                                for col in tabs_data:
+                                    df, _ = tabs_data[col]
+                                    if 'Index' in df.columns:
+                                        df.insert(1, 'Time', new_time_values)
+                                    else:
+                                        df.insert(0, 'Time', new_time_values)
+                        except Exception as e:
+                            print(f"Time downsampling error: {e}")
+
+                    else: # No Upsampling or Downsampling (Length match)
+                        # 원본 시간 데이터 그대로 사용
                         if mod_len == orig_len:
                              for col in tabs_data:
                                 df, _ = tabs_data[col]
-                                df.insert(0, 'Time', orig_time_values)
-                        else:
-                             # 길이가 다르면(Downsampling 등) Time 컬럼 추가 안 함 (안전하게)
-                             pass
+                                # Time 컬럼 삽입
+                                if 'Index' in df.columns:
+                                    df.insert(1, 'Time', orig_time_values)
+                                else:
+                                    df.insert(0, 'Time', orig_time_values)
 
                 except Exception as e:
                     print(f"Time column processing error: {e}")
@@ -1603,7 +1613,8 @@ class MainWindow(QMainWindow):
         for col in result_df.columns:
             # 1. Datetime 감지
             # 사용자가 지정한 Time Column이거나, 데이터 타입이 datetime인 경우
-            is_time_col_selected = hasattr(self, 'comboTimeCol') and self.comboTimeCol.currentText() == col
+            # Time Column Exists가 체크되어 있어야 함
+            is_time_col_selected = hasattr(self, 'comboTimeCol') and self.chkTimeExists.isChecked() and self.comboTimeCol.currentText() == col
             is_dt_type = pd.api.types.is_datetime64_any_dtype(result_df[col])
             
             if is_time_col_selected or is_dt_type:
@@ -1987,6 +1998,12 @@ class MainWindow(QMainWindow):
                         # 선택 안 된 컬럼도 길이를 맞춰야 함 (동기화)
                         # Upsampling이면 Linear, Downsampling이면 Average를 기본으로 사용
                         sync_method = "Linear" if ratio > 1 else "Average"
+                        
+                        # Time Column Downsampling: Use Min to preserve start time
+                        # Time Column Exists가 체크되어 있고, 현재 컬럼이 Time Column인 경우
+                        if ratio < 1 and self.chkTimeExists.isChecked() and col == self.comboTimeCol.currentText():
+                            sync_method = "Min"
+                            
                         mod_data = self.apply_modification(col_data, sync_method, value, ratio)
                     new_parts.append(mod_data.reset_index(drop=True))
                 
