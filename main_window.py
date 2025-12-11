@@ -18,11 +18,12 @@ from PyQt5.QtWidgets import (
     QWidget, QHBoxLayout, QPushButton, QTabWidget, QApplication, QSplashScreen,
     QComboBox, QLineEdit, QScrollArea, QTableView
 )
-from PyQt5.QtCore import Qt, QThread, pyqtSignal, QObject, QAbstractTableModel
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QObject, QAbstractTableModel, QSettings
 from PyQt5.QtGui import QColor, QIcon, QFont, QPixmap
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
 import numpy as np
 import pandas as pd
 try:
@@ -835,10 +836,24 @@ class MainWindow(QMainWindow):
         self.figure = Figure(figsize=(8, 4), dpi=100, facecolor='#1E1E1E')
         self.canvas = FigureCanvas(self.figure)
         
-        # 그래프 설정
+        # 그래프 타이틀용 라벨 생성 (그래프 바깥 상단)
+        self.graph_title_label = QLabel("Before/After Comparison Graph")
+        self.graph_title_label.setAlignment(Qt.AlignCenter)
+        self.graph_title_label.setWordWrap(True)  # 자동 줄바꿈 활성화
+        self.graph_title_label.setStyleSheet("color: white; font-size: 14px; font-weight: bold; padding: 5px;")
+
+        # 레이아웃에 위젯 추가 (라벨 -> 캔버스 순서)
+        layout.addWidget(self.graph_title_label)
+        layout.addWidget(self.canvas)
+        
+        # 캔버스 Focus 정책 설정
+        self.canvas.setFocusPolicy(Qt.ClickFocus)
+        self.canvas.setFocus()
+        
+        # Axes 설정
         self.ax = self.figure.add_subplot(111)
         self.ax.set_facecolor('#1E1E1E')
-        self.ax.set_title("Before/After Comparison Graph", color='white', fontsize=12, fontweight='bold')
+        # self.ax.set_title 제거 (외부 라벨 사용)
         self.ax.set_xlabel("Sample Count", color='#CCCCCC')
         self.ax.set_ylabel("Value", color='#CCCCCC')
         self.ax.tick_params(colors='#CCCCCC')
@@ -849,9 +864,6 @@ class MainWindow(QMainWindow):
             spine.set_color('#555555')
         
         self.figure.tight_layout()
-        
-        # 레이아웃에 캔버스 추가
-        layout.addWidget(self.canvas)
 
     def setup_custom_unit_visibility(self):
         """Custom 단위 선택 시 위젯 표시/숨김 설정"""
@@ -1285,14 +1297,20 @@ class MainWindow(QMainWindow):
 
     def browse_file(self):
         """파일 선택 대화상자 열기"""
+        # 가장 최근에 사용한 폴더 경로 가져오기
+        settings = QSettings("DataModify", "App")
+        last_dir = settings.value("LastDir", "")
+
         file_path, _ = QFileDialog.getOpenFileName(
             self,
             "Select Data File",
-            "",
+            last_dir,
             "Data Files (*.xlsx *.xls *.csv *.txt);;All Files (*)"
         )
 
         if file_path:
+            # 성공적으로 파일을 선택했다면 해당 경로 저장
+            settings.setValue("LastDir", os.path.dirname(file_path))
             self.load_data(file_path)
 
     def load_data(self, file_path):
@@ -1458,7 +1476,41 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 self.add_log(f"Error plotting column {col}: {str(e)}")
             
-        self.ax.legend(loc='upper left', facecolor='#2D2D30', edgecolor='#555555', labelcolor='white')
+            
+        # Legend (Label) 업데이트 (외부 라벨 사용 - HTML)
+        # self.ax.legend() 대신 handles/labels를 가져와서 HTML로 구성
+        handles, labels = self.ax.get_legend_handles_labels()
+        
+        legend_items = []
+        for h, l in zip(handles, labels):
+            try:
+                # Line2D 등의 색상 추출
+                color = h.get_color()
+                # RGBA/Name -> Hex 변환
+                hex_color = mcolors.to_hex(color)
+                
+                # HTML 아이템 생성 (색상 바 + 라벨)
+                # 굵은 선(—)이나 사각형(■) 등 사용 가능. 여기서는 굵은 선 사용.
+                # &nbsp;로 간격 조정
+                # white-space: nowrap 추가하여 아이템 내부 줄바꿈 방지
+                item = f"<span style='white-space: nowrap;'><span style='color:{hex_color}; font-weight:bold; font-size:16px;'>―</span> <span style='color:white; font-size:12px;'>{l}</span></span>"
+                legend_items.append(item)
+            except Exception as e:
+                # 색상 추출 실패 시 기본 텍스트만
+                legend_items.append(f"<span style='white-space: nowrap;'>{l}</span>")
+        
+        # 아이템들을 공백으로 연결 (줄바꿈은 setWordWrap(True)에 의해 자동 처리됨)
+        # 중요: &nbsp;만 사용하면 줄바꿈이 일어나지 않음. 일반 공백(' ')을 포함해야 함.
+        # 가독성을 위해 &nbsp; 4개 + 일반 공백 1개 사용
+        legend_html = "&nbsp;&nbsp;&nbsp;&nbsp; ".join(legend_items)
+        
+        if hasattr(self, 'graph_title_label'):
+            self.graph_title_label.setText(legend_html)
+            # 중앙 정렬 유지
+            self.graph_title_label.setAlignment(Qt.AlignCenter)
+
+        # Matplotlib 내부 Legend는 표시하지 않음 (기존 self.ax.legend 삭제)
+        # self.ax.legend(...) # Removed
         
         # X축 라벨 설정
         self.ax.set_xlabel("Sample Count", color='#CCCCCC')
